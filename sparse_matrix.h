@@ -47,7 +47,7 @@
 #include <numa.h>
 
 #ifdef CUB_MKL
-    #include <mkl.h>
+#include <mkl.h>
 #endif
 
 using namespace std;
@@ -58,35 +58,35 @@ using namespace std;
 
 struct GraphStats
 {
-    int         num_rows;
-    int         num_cols;
-    int         num_nonzeros;
+    int num_rows;
+    int num_cols;
+    int num_nonzeros;
 
-    double      pearson_r;              // coefficient of variation x vs y (how linear the sparsity plot is)
+    double pearson_r; // coefficient of variation x vs y (how linear the sparsity plot is)
 
-    double      row_length_mean;        // mean
-    double      row_length_std_dev;     // sample std_dev
-    double      row_length_variation;   // coefficient of variation
-    double      row_length_skewness;    // skewness
+    double row_length_mean;      // mean
+    double row_length_std_dev;   // sample std_dev
+    double row_length_variation; // coefficient of variation
+    double row_length_skewness;  // skewness
 
     void Display(bool show_labels = true)
     {
         if (show_labels)
             printf("\n"
-                "\t num_rows: %d\n"
-                "\t num_cols: %d\n"
-                "\t num_nonzeros: %d\n"
-                "\t row_length_mean: %.5f\n"
-                "\t row_length_std_dev: %.5f\n"
-                "\t row_length_variation: %.5f\n"
-                "\t row_length_skewness: %.5f\n",
-                    num_rows,
-                    num_cols,
-                    num_nonzeros,
-                    row_length_mean,
-                    row_length_std_dev,
-                    row_length_variation,
-                    row_length_skewness);
+                   "\t num_rows: %d\n"
+                   "\t num_cols: %d\n"
+                   "\t num_nonzeros: %d\n"
+                   "\t row_length_mean: %.5f\n"
+                   "\t row_length_std_dev: %.5f\n"
+                   "\t row_length_variation: %.5f\n"
+                   "\t row_length_skewness: %.5f\n",
+                   num_rows,
+                   num_cols,
+                   num_nonzeros,
+                   row_length_mean,
+                   row_length_std_dev,
+                   row_length_variation,
+                   row_length_skewness);
         else
             printf(
                 "%d, "
@@ -96,16 +96,15 @@ struct GraphStats
                 "%.5f, "
                 "%.5f, "
                 "%.5f, ",
-                    num_rows,
-                    num_cols,
-                    num_nonzeros,
-                    row_length_mean,
-                    row_length_std_dev,
-                    row_length_variation,
-                    row_length_skewness);
+                num_rows,
+                num_cols,
+                num_nonzeros,
+                row_length_mean,
+                row_length_std_dev,
+                row_length_variation,
+                row_length_skewness);
     }
 };
-
 
 /******************************************************************************
  * COO matrix type
@@ -115,7 +114,7 @@ struct GraphStats
  * COO matrix type.  A COO matrix is just a vector of edge tuples.  Tuples are sorted
  * first by row, then by column.
  */
-template<typename ValueT, typename OffsetT>
+template <typename ValueT, typename OffsetT>
 struct CooMatrix
 {
     //---------------------------------------------------------------------
@@ -125,25 +124,24 @@ struct CooMatrix
     // COO edge tuple
     struct CooTuple
     {
-        OffsetT            row;
-        OffsetT            col;
-        ValueT             val;
+        OffsetT row;
+        OffsetT col;
+        ValueT val;
 
         CooTuple() {}
         CooTuple(OffsetT row, OffsetT col) : row(row), col(col) {}
         CooTuple(OffsetT row, OffsetT col, ValueT val) : row(row), col(col), val(val) {}
     };
 
-
     //---------------------------------------------------------------------
     // Data members
     //---------------------------------------------------------------------
 
     // Fields
-    OffsetT             num_rows;
-    OffsetT             num_cols;
-    OffsetT             num_nonzeros;
-    CooTuple*           coo_tuples;
+    OffsetT num_rows;
+    OffsetT num_cols;
+    OffsetT num_nonzeros;
+    CooTuple *coo_tuples;
 
     //---------------------------------------------------------------------
     // Methods
@@ -152,23 +150,21 @@ struct CooMatrix
     // Constructor
     CooMatrix() : num_rows(0), num_cols(0), num_nonzeros(0), coo_tuples(NULL) {}
 
-
     /**
      * Clear
      */
     void Clear()
     {
-        if (coo_tuples) delete[] coo_tuples;
+        if (coo_tuples)
+            delete[] coo_tuples;
         coo_tuples = NULL;
     }
-
 
     // Destructor
     ~CooMatrix()
     {
         Clear();
     }
-
 
     // Display matrix to stdout
     void Display()
@@ -181,12 +177,11 @@ struct CooMatrix
         }
     }
 
-
     /**
      * Builds a COO sparse from a relabeled CSR matrix.
      */
     template <typename CsrMatrixT>
-    void InitCsrRelabel(CsrMatrixT &csr_matrix, OffsetT* relabel_indices)
+    void InitCsrRelabel(CsrMatrixT &csr_matrix, OffsetT *relabel_indices)
     {
         if (coo_tuples)
         {
@@ -194,10 +189,10 @@ struct CooMatrix
             exit(1);
         }
 
-        num_rows        = csr_matrix.num_rows;
-        num_cols        = csr_matrix.num_cols;
-        num_nonzeros    = csr_matrix.num_nonzeros;
-        coo_tuples      = new CooTuple[num_nonzeros];
+        num_rows = csr_matrix.num_rows;
+        num_cols = csr_matrix.num_cols;
+        num_nonzeros = csr_matrix.num_nonzeros;
+        coo_tuples = new CooTuple[num_nonzeros];
 
         for (OffsetT row = 0; row < num_rows; ++row)
         {
@@ -210,17 +205,18 @@ struct CooMatrix
         }
     }
 
-
     /**
      * Builds a MARKET COO sparse from the given file.
      */
     void InitMarket(
-        const string&   market_filename,
-        ValueT          default_value       = 1.0,
-        bool            verbose             = false)
+        const string &market_filename,
+        ValueT default_value = 1.0,
+        bool verbose = false)
     {
-        if (verbose) {
-            printf("Reading... "); fflush(stdout);
+        if (verbose)
+        {
+            printf("Reading... ");
+            fflush(stdout);
         }
 
         if (coo_tuples)
@@ -237,14 +233,16 @@ struct CooMatrix
             exit(1);
         }
 
-        bool    array = false;
-        bool    symmetric = false;
-        bool    skew = false;
-        OffsetT     current_nz = -1;
-        char    line[1024];
+        bool array = false;
+        bool symmetric = false;
+        bool skew = false;
+        OffsetT current_nz = -1;
+        char line[1024];
 
-        if (verbose) {
-            printf("Parsing... "); fflush(stdout);
+        if (verbose)
+        {
+            printf("Parsing... ");
+            fflush(stdout);
         }
 
         while (true)
@@ -262,12 +260,14 @@ struct CooMatrix
                 if (line[1] == '%')
                 {
                     // Banner
-                    symmetric   = (strstr(line, "symmetric") != NULL);
-                    skew        = (strstr(line, "skew") != NULL);
-                    array       = (strstr(line, "array") != NULL);
+                    symmetric = (strstr(line, "symmetric") != NULL);
+                    skew = (strstr(line, "skew") != NULL);
+                    array = (strstr(line, "array") != NULL);
 
-                    if (verbose) {
-                        printf("(symmetric: %d, skew: %d, array: %d) ", symmetric, skew, array); fflush(stdout);
+                    if (verbose)
+                    {
+                        printf("(symmetric: %d, skew: %d, array: %d) ", symmetric, skew, array);
+                        fflush(stdout);
                     }
                 }
             }
@@ -283,7 +283,6 @@ struct CooMatrix
                     // Allocate coo matrix
                     coo_tuples = new CooTuple[num_nonzeros];
                     current_nz = 0;
-
                 }
                 else if (array && (nparsed == 2))
                 {
@@ -297,7 +296,6 @@ struct CooMatrix
                     fprintf(stderr, "Error parsing MARKET matrix: invalid problem description: %s\n", line);
                     exit(1);
                 }
-
             }
             else
             {
@@ -321,7 +319,7 @@ struct CooMatrix
                     col = (current_nz / num_rows);
                     row = (current_nz - (num_rows * col));
 
-                    coo_tuples[current_nz] = CooTuple(row, col, val);    // Convert indices to zero-based
+                    coo_tuples[current_nz] = CooTuple(row, col, val); // Convert indices to zero-based
                 }
                 else
                 {
@@ -354,7 +352,7 @@ struct CooMatrix
                         val = default_value;
                     }
 
-                    coo_tuples[current_nz] = CooTuple(row - 1, col - 1, val);    // Convert indices to zero-based
+                    coo_tuples[current_nz] = CooTuple(row - 1, col - 1, val); // Convert indices to zero-based
                 }
 
                 current_nz++;
@@ -372,22 +370,23 @@ struct CooMatrix
         // Adjust nonzero count (nonzeros along the diagonal aren't reversed)
         num_nonzeros = current_nz;
 
-        if (verbose) {
-            printf("done. "); fflush(stdout);
+        if (verbose)
+        {
+            printf("done. ");
+            fflush(stdout);
         }
 
         ifs.close();
     }
 
-
     /**
      * Builds a dense matrix
      */
     int InitDense(
-        OffsetT     num_rows,
-        OffsetT     num_cols,
-        ValueT      default_value   = 1.0,
-        bool        verbose         = false)
+        OffsetT num_rows,
+        OffsetT num_cols,
+        ValueT default_value = 1.0,
+        bool verbose = false)
     {
         if (coo_tuples)
         {
@@ -395,11 +394,11 @@ struct CooMatrix
             exit(1);
         }
 
-        this->num_rows  = num_rows;
-        this->num_cols  = num_cols;
+        this->num_rows = num_rows;
+        this->num_cols = num_cols;
 
-        num_nonzeros    = num_rows * num_cols;
-        coo_tuples      = new CooTuple[num_nonzeros];
+        num_nonzeros = num_rows * num_cols;
+        coo_tuples = new CooTuple[num_nonzeros];
 
         for (OffsetT row = 0; row < num_rows; ++row)
         {
@@ -412,14 +411,13 @@ struct CooMatrix
         return 0;
     }
 
-
     /**
      * Builds a wheel COO sparse matrix having spokes spokes.
      */
     int InitWheel(
-        OffsetT     spokes,
-        ValueT      default_value   = 1.0,
-        bool        verbose         = false)
+        OffsetT spokes,
+        ValueT default_value = 1.0,
+        bool verbose = false)
     {
         if (coo_tuples)
         {
@@ -427,10 +425,10 @@ struct CooMatrix
             exit(1);
         }
 
-        num_rows        = spokes + 1;
-        num_cols        = num_rows;
-        num_nonzeros    = spokes * 2;
-        coo_tuples      = new CooTuple[num_nonzeros];
+        num_rows = spokes + 1;
+        num_cols = num_rows;
+        num_nonzeros = spokes * 2;
+        coo_tuples = new CooTuple[num_nonzeros];
 
         // Add spoke num_nonzeros
         OffsetT current_nz = 0;
@@ -451,7 +449,6 @@ struct CooMatrix
         return 0;
     }
 
-
     /**
      * Builds a square 2D grid CSR matrix.  Interior num_vertices have degree 5 when including
      * a self-loop.
@@ -466,18 +463,18 @@ struct CooMatrix
             exit(1);
         }
 
-        OffsetT     interior_nodes  = (width - 2) * (width - 2);
-        OffsetT     edge_nodes      = (width - 2) * 4;
-        OffsetT     corner_nodes    = 4;
-        num_rows                       = width * width;
-        num_cols                       = num_rows;
-        num_nonzeros                   = (interior_nodes * 4) + (edge_nodes * 3) + (corner_nodes * 2);
+        OffsetT interior_nodes = (width - 2) * (width - 2);
+        OffsetT edge_nodes = (width - 2) * 4;
+        OffsetT corner_nodes = 4;
+        num_rows = width * width;
+        num_cols = num_rows;
+        num_nonzeros = (interior_nodes * 4) + (edge_nodes * 3) + (corner_nodes * 2);
 
         if (self_loop)
             num_nonzeros += num_rows;
 
-        coo_tuples          = new CooTuple[num_nonzeros];
-        OffsetT current_nz    = 0;
+        coo_tuples = new CooTuple[num_nonzeros];
+        OffsetT current_nz = 0;
 
         for (OffsetT j = 0; j < width; j++)
         {
@@ -487,28 +484,32 @@ struct CooMatrix
 
                 // West
                 OffsetT neighbor = (j * width) + (k - 1);
-                if (k - 1 >= 0) {
+                if (k - 1 >= 0)
+                {
                     coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                     current_nz++;
                 }
 
                 // East
                 neighbor = (j * width) + (k + 1);
-                if (k + 1 < width) {
+                if (k + 1 < width)
+                {
                     coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                     current_nz++;
                 }
 
                 // North
                 neighbor = ((j - 1) * width) + k;
-                if (j - 1 >= 0) {
+                if (j - 1 >= 0)
+                {
                     coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                     current_nz++;
                 }
 
                 // South
                 neighbor = ((j + 1) * width) + k;
-                if (j + 1 < width) {
+                if (j + 1 < width)
+                {
                     coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                     current_nz++;
                 }
@@ -525,7 +526,6 @@ struct CooMatrix
         return 0;
     }
 
-
     /**
      * Builds a square 3D grid COO sparse matrix.  Interior num_vertices have degree 7 when including
      * a self-loop.  Values are unintialized, coo_tuples are sorted.
@@ -538,19 +538,19 @@ struct CooMatrix
             return -1;
         }
 
-        OffsetT interior_nodes  = (width - 2) * (width - 2) * (width - 2);
-        OffsetT face_nodes      = (width - 2) * (width - 2) * 6;
-        OffsetT edge_nodes      = (width - 2) * 12;
-        OffsetT corner_nodes    = 8;
-        num_cols                       = width * width * width;
-        num_rows                       = num_cols;
-        num_nonzeros                     = (interior_nodes * 6) + (face_nodes * 5) + (edge_nodes * 4) + (corner_nodes * 3);
+        OffsetT interior_nodes = (width - 2) * (width - 2) * (width - 2);
+        OffsetT face_nodes = (width - 2) * (width - 2) * 6;
+        OffsetT edge_nodes = (width - 2) * 12;
+        OffsetT corner_nodes = 8;
+        num_cols = width * width * width;
+        num_rows = num_cols;
+        num_nonzeros = (interior_nodes * 6) + (face_nodes * 5) + (edge_nodes * 4) + (corner_nodes * 3);
 
         if (self_loop)
             num_nonzeros += num_rows;
 
-        coo_tuples              = new CooTuple[num_nonzeros];
-        OffsetT current_nz    = 0;
+        coo_tuples = new CooTuple[num_nonzeros];
+        OffsetT current_nz = 0;
 
         for (OffsetT i = 0; i < width; i++)
         {
@@ -563,42 +563,48 @@ struct CooMatrix
 
                     // Up
                     OffsetT neighbor = (i * width * width) + (j * width) + (k - 1);
-                    if (k - 1 >= 0) {
+                    if (k - 1 >= 0)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
 
                     // Down
                     neighbor = (i * width * width) + (j * width) + (k + 1);
-                    if (k + 1 < width) {
+                    if (k + 1 < width)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
 
                     // West
                     neighbor = (i * width * width) + ((j - 1) * width) + k;
-                    if (j - 1 >= 0) {
+                    if (j - 1 >= 0)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
 
                     // East
                     neighbor = (i * width * width) + ((j + 1) * width) + k;
-                    if (j + 1 < width) {
+                    if (j + 1 < width)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
 
                     // North
                     neighbor = ((i - 1) * width * width) + (j * width) + k;
-                    if (i - 1 >= 0) {
+                    if (i - 1 >= 0)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
 
                     // South
                     neighbor = ((i + 1) * width * width) + (j * width) + k;
-                    if (i + 1 < width) {
+                    if (i + 1 < width)
+                    {
                         coo_tuples[current_nz] = CooTuple(me, neighbor, default_value);
                         current_nz++;
                     }
@@ -617,9 +623,6 @@ struct CooMatrix
     }
 };
 
-
-
-
 /******************************************************************************
  * CSR matrix type
  ******************************************************************************/
@@ -627,7 +630,7 @@ struct CooMatrix
 /**
  * CSR sparse format matrix
  */
-template<
+template <
     typename ValueT,
     typename OffsetT>
 struct CsrMatrix
@@ -642,13 +645,12 @@ struct CsrMatrix
         }
     };
 
-    OffsetT     num_rows;
-    OffsetT     num_cols;
-    OffsetT     num_nonzeros;
-    OffsetT*    row_offsets;
-    OffsetT*    column_indices;
-    ValueT*     values;
-
+    OffsetT num_rows;
+    OffsetT num_cols;
+    OffsetT num_nonzeros;
+    OffsetT *row_offsets;
+    OffsetT *column_indices;
+    ValueT *values;
 
     // Whether to use NUMA malloc to always put storage on the same sockets (for perf repeatability)
     bool IsNumaMalloc()
@@ -664,17 +666,21 @@ struct CsrMatrix
      * Initializer
      */
     void Init(
-        CooMatrix<ValueT, OffsetT>  &coo_matrix,
-        bool                        verbose = false)
+        CooMatrix<ValueT, OffsetT> &coo_matrix,
+        bool verbose = false)
     {
-        num_rows        = coo_matrix.num_rows;
-        num_cols        = coo_matrix.num_cols;
-        num_nonzeros    = coo_matrix.num_nonzeros;
+        num_rows = coo_matrix.num_rows;
+        num_cols = coo_matrix.num_cols;
+        num_nonzeros = coo_matrix.num_nonzeros;
 
         // Sort by rows, then columns
-        if (verbose) printf("Ordering..."); fflush(stdout);
+        if (verbose)
+            printf("Ordering...");
+        fflush(stdout);
         std::stable_sort(coo_matrix.coo_tuples, coo_matrix.coo_tuples + num_nonzeros, CooComparator());
-        if (verbose) printf("done."); fflush(stdout);
+        if (verbose)
+            printf("done.");
+        fflush(stdout);
 
 #ifdef CUB_MKL
 
@@ -682,26 +688,25 @@ struct CsrMatrix
         {
             numa_set_strict(1);
 
-            row_offsets     = (OffsetT*) numa_alloc_onnode(sizeof(OffsetT) * (num_rows + 1), 0);
-            column_indices  = (OffsetT*) numa_alloc_onnode(sizeof(OffsetT) * num_nonzeros, 0);
+            row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (num_rows + 1), 0);
+            column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * num_nonzeros, 0);
 
             if (numa_num_task_nodes() > 1)
-                values          = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * num_nonzeros, 1);    // put on different socket than column_indices
+                values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * num_nonzeros, 1); // put on different socket than column_indices
             else
-                values          = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * num_nonzeros, 0);
+                values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * num_nonzeros, 0);
         }
         else
         {
-            values          = (ValueT*) mkl_malloc(sizeof(ValueT) * num_nonzeros, 4096);
-            row_offsets     = (OffsetT*) mkl_malloc(sizeof(OffsetT) * (num_rows + 1), 4096);
-            column_indices  = (OffsetT*) mkl_malloc(sizeof(OffsetT) * num_nonzeros, 4096);
-
+            values = (ValueT *)mkl_malloc(sizeof(ValueT) * num_nonzeros, 4096);
+            row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (num_rows + 1), 4096);
+            column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * num_nonzeros, 4096);
         }
 
 #else
-        row_offsets     = new OffsetT[num_rows + 1];
-        column_indices  = new OffsetT[num_nonzeros];
-        values          = new ValueT[num_nonzeros];
+        row_offsets = new OffsetT[num_rows + 1];
+        column_indices = new OffsetT[num_nonzeros];
+        values = new ValueT[num_nonzeros];
 #endif
 
         OffsetT prev_row = -1;
@@ -716,8 +721,8 @@ struct CsrMatrix
             }
             prev_row = current_row;
 
-            column_indices[current_nz]    = coo_matrix.coo_tuples[current_nz].col;
-            values[current_nz]            = coo_matrix.coo_tuples[current_nz].val;
+            column_indices[current_nz] = coo_matrix.coo_tuples[current_nz].col;
+            values[current_nz] = coo_matrix.coo_tuples[current_nz].val;
         }
 
         // Fill out any trailing edgeless vertices (and the end-of-list element)
@@ -726,7 +731,6 @@ struct CsrMatrix
             row_offsets[row] = num_nonzeros;
         }
     }
-
 
     /**
      * Clear
@@ -742,34 +746,37 @@ struct CsrMatrix
         }
         else
         {
-            if (row_offsets)    mkl_free(row_offsets);
-            if (column_indices) mkl_free(column_indices);
-            if (values)         mkl_free(values);
+            if (row_offsets)
+                mkl_free(row_offsets);
+            if (column_indices)
+                mkl_free(column_indices);
+            if (values)
+                mkl_free(values);
         }
 
 #else
-        if (row_offsets)    delete[] row_offsets;
-        if (column_indices) delete[] column_indices;
-        if (values)         delete[] values;
+        if (row_offsets)
+            delete[] row_offsets;
+        if (column_indices)
+            delete[] column_indices;
+        if (values)
+            delete[] values;
 #endif
 
         row_offsets = NULL;
         column_indices = NULL;
         values = NULL;
-
     }
-
 
     /**
      * Constructor
      */
     CsrMatrix(
-        CooMatrix<ValueT, OffsetT>  &coo_matrix,
-        bool                        verbose = false)
+        CooMatrix<ValueT, OffsetT> &coo_matrix,
+        bool verbose = false)
     {
         Init(coo_matrix, verbose);
     }
-
 
     /**
      * Destructor
@@ -778,7 +785,6 @@ struct CsrMatrix
     {
         Clear();
     }
-
 
     /**
      * Get graph statistics
@@ -794,24 +800,24 @@ struct CsrMatrix
         // Compute diag-distance statistics
         //
 
-        OffsetT samples     = 0;
-        double  mean        = 0.0;
-        double  ss_tot      = 0.0;
+        OffsetT samples = 0;
+        double mean = 0.0;
+        double ss_tot = 0.0;
 
         for (OffsetT row = 0; row < num_rows; ++row)
         {
-            OffsetT nz_idx_start    = row_offsets[row];
-            OffsetT nz_idx_end      = row_offsets[row + 1];
+            OffsetT nz_idx_start = row_offsets[row];
+            OffsetT nz_idx_end = row_offsets[row + 1];
 
             for (int nz_idx = nz_idx_start; nz_idx < nz_idx_end; ++nz_idx)
             {
-                OffsetT col             = column_indices[nz_idx];
-                double x                = (col > row) ? col - row : row - col;
+                OffsetT col = column_indices[nz_idx];
+                double x = (col > row) ? col - row : row - col;
 
                 samples++;
-                double delta            = x - mean;
-                mean                    = mean + (delta / samples);
-                ss_tot                  += delta * (x - mean);
+                double delta = x - mean;
+                mean = mean + (delta / samples);
+                ss_tot += delta * (x - mean);
             }
         }
 
@@ -819,71 +825,71 @@ struct CsrMatrix
         // Compute deming statistics
         //
 
-        samples         = 0;
-        double mean_x   = 0.0;
-        double mean_y   = 0.0;
-        double ss_x     = 0.0;
-        double ss_y     = 0.0;
+        samples = 0;
+        double mean_x = 0.0;
+        double mean_y = 0.0;
+        double ss_x = 0.0;
+        double ss_y = 0.0;
 
         for (OffsetT row = 0; row < num_rows; ++row)
         {
-            OffsetT nz_idx_start    = row_offsets[row];
-            OffsetT nz_idx_end      = row_offsets[row + 1];
+            OffsetT nz_idx_start = row_offsets[row];
+            OffsetT nz_idx_end = row_offsets[row + 1];
 
             for (int nz_idx = nz_idx_start; nz_idx < nz_idx_end; ++nz_idx)
             {
-                OffsetT col             = column_indices[nz_idx];
+                OffsetT col = column_indices[nz_idx];
 
                 samples++;
-                double x                = col;
-                double y                = row;
+                double x = col;
+                double y = row;
                 double delta;
 
-                delta                   = x - mean_x;
-                mean_x                  = mean_x + (delta / samples);
-                ss_x                    += delta * (x - mean_x);
+                delta = x - mean_x;
+                mean_x = mean_x + (delta / samples);
+                ss_x += delta * (x - mean_x);
 
-                delta                   = y - mean_y;
-                mean_y                  = mean_y + (delta / samples);
-                ss_y                    += delta * (y - mean_y);
+                delta = y - mean_y;
+                mean_y = mean_y + (delta / samples);
+                ss_y += delta * (y - mean_y);
             }
         }
 
-        samples         = 0;
-        double s_xy     = 0.0;
-        double s_xxy    = 0.0;
-        double s_xyy    = 0.0;
+        samples = 0;
+        double s_xy = 0.0;
+        double s_xxy = 0.0;
+        double s_xyy = 0.0;
         for (OffsetT row = 0; row < num_rows; ++row)
         {
-            OffsetT nz_idx_start    = row_offsets[row];
-            OffsetT nz_idx_end      = row_offsets[row + 1];
+            OffsetT nz_idx_start = row_offsets[row];
+            OffsetT nz_idx_end = row_offsets[row + 1];
 
             for (int nz_idx = nz_idx_start; nz_idx < nz_idx_end; ++nz_idx)
             {
-                OffsetT col             = column_indices[nz_idx];
+                OffsetT col = column_indices[nz_idx];
 
                 samples++;
-                double x                = col;
-                double y                = row;
+                double x = col;
+                double y = row;
 
-                double xy =             (x - mean_x) * (y - mean_y);
-                double xxy =            (x - mean_x) * (x - mean_x) * (y - mean_y);
-                double xyy =            (x - mean_x) * (y - mean_y) * (y - mean_y);
+                double xy = (x - mean_x) * (y - mean_y);
+                double xxy = (x - mean_x) * (x - mean_x) * (y - mean_y);
+                double xyy = (x - mean_x) * (y - mean_y) * (y - mean_y);
                 double delta;
 
-                delta                   = xy - s_xy;
-                s_xy                    = s_xy + (delta / samples);
+                delta = xy - s_xy;
+                s_xy = s_xy + (delta / samples);
 
-                delta                   = xxy - s_xxy;
-                s_xxy                   = s_xxy + (delta / samples);
+                delta = xxy - s_xxy;
+                s_xxy = s_xxy + (delta / samples);
 
-                delta                   = xyy - s_xyy;
-                s_xyy                   = s_xyy + (delta / samples);
+                delta = xyy - s_xyy;
+                s_xyy = s_xyy + (delta / samples);
             }
         }
 
-        double s_xx     = ss_x / num_nonzeros;
-        double s_yy     = ss_y / num_nonzeros;
+        double s_xx = ss_x / num_nonzeros;
+        double s_yy = ss_y / num_nonzeros;
 
         double deming_slope = (s_yy - s_xx + sqrt(((s_yy - s_xx) * (s_yy - s_xx)) + (4 * s_xy * s_xy))) / (2 * s_xy);
 
@@ -894,24 +900,23 @@ struct CsrMatrix
         //
 
         // Sample mean
-        stats.row_length_mean       = double(num_nonzeros) / num_rows;
-        double variance             = 0.0;
-        stats.row_length_skewness   = 0.0;
+        stats.row_length_mean = double(num_nonzeros) / num_rows;
+        double variance = 0.0;
+        stats.row_length_skewness = 0.0;
         for (OffsetT row = 0; row < num_rows; ++row)
         {
-            OffsetT length              = row_offsets[row + 1] - row_offsets[row];
-            double delta                = double(length) - stats.row_length_mean;
-            variance   += (delta * delta);
-            stats.row_length_skewness   += (delta * delta * delta);
+            OffsetT length = row_offsets[row + 1] - row_offsets[row];
+            double delta = double(length) - stats.row_length_mean;
+            variance += (delta * delta);
+            stats.row_length_skewness += (delta * delta * delta);
         }
-        variance                    /= num_rows;
-        stats.row_length_std_dev    = sqrt(variance);
-        stats.row_length_skewness   = (stats.row_length_skewness / num_rows) / pow(stats.row_length_std_dev, 3.0);
-        stats.row_length_variation  = stats.row_length_std_dev / stats.row_length_mean;
+        variance /= num_rows;
+        stats.row_length_std_dev = sqrt(variance);
+        stats.row_length_skewness = (stats.row_length_skewness / num_rows) / pow(stats.row_length_std_dev, 3.0);
+        stats.row_length_variation = stats.row_length_std_dev / stats.row_length_mean;
 
         return stats;
     }
-
 
     /**
      * Display log-histogram to stdout
@@ -947,21 +952,20 @@ struct CsrMatrix
 
             log_counts[log_length + 1]++;
         }
-        printf("CSR matrix (%d rows, %d columns, %d non-zeros, max-length %d):\n", (int) num_rows, (int) num_cols, (int) num_nonzeros, (int) max_length);
+        printf("CSR matrix (%d rows, %d columns, %d non-zeros, max-length %d):\n", (int)num_rows, (int)num_cols, (int)num_nonzeros, (int)max_length);
         for (OffsetT i = -1; i < max_log_length + 1; i++)
         {
-            printf("\tDegree 1e%d: \t%d (%.2f%%)\n", i, log_counts[i + 1], (float) log_counts[i + 1] * 100.0 / num_cols);
+            printf("\tDegree 1e%d: \t%d (%.2f%%)\n", i, log_counts[i + 1], (float)log_counts[i + 1] * 100.0 / num_cols);
         }
         fflush(stdout);
     }
-
 
     /**
      * Display matrix to stdout
      */
     void Display()
     {
-        printf("Input Matrix (%d vertices, %d nonzeros):\n", (int) num_rows, (int) num_nonzeros);
+        printf("Input Matrix (%d vertices, %d nonzeros):\n", (int)num_rows, (int)num_nonzeros);
         for (OffsetT row = 0; row < num_rows; row++)
         {
             printf("%d [@%d, #%d]: ", row, row_offsets[row], row_offsets[row + 1] - row_offsets[row]);
@@ -973,7 +977,4 @@ struct CsrMatrix
         }
         fflush(stdout);
     }
-
-
 };
-

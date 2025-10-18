@@ -41,11 +41,9 @@
  *
  ******************************************************************************/
 
-
 //---------------------------------------------------------------------
 // SpMV comparison tool
 //---------------------------------------------------------------------
-
 
 #include <omp.h>
 
@@ -63,18 +61,15 @@
 #include "sparse_matrix.h"
 #include "utils.h"
 
-
-
 //---------------------------------------------------------------------
 // Globals, constants, and type declarations
 //---------------------------------------------------------------------
 
-bool                    g_quiet             = false;        // Whether to display stats in CSV format
-bool                    g_verbose           = false;        // Whether to display output to console
-bool                    g_verbose2          = false;        // Whether to display input to console
-int                     g_omp_threads       = -1;           // Number of openMP threads
-int                     g_expected_calls    = 1000000;
-
+bool g_quiet = false;    // Whether to display stats in CSV format
+bool g_verbose = false;  // Whether to display output to console
+bool g_verbose2 = false; // Whether to display input to console
+int g_omp_threads = -1;  // Number of openMP threads
+int g_expected_calls = 1000000;
 
 //---------------------------------------------------------------------
 // Utility types
@@ -86,8 +81,6 @@ struct int2
     int y;
 };
 
-
-
 /**
  * Counting iterator
  */
@@ -97,21 +90,21 @@ template <
 struct CountingInputIterator
 {
     // Required iterator traits
-    typedef CountingInputIterator               self_type;              ///< My own type
-    typedef OffsetT                             difference_type;        ///< Type to express the result of subtracting one iterator from another
-    typedef ValueType                           value_type;             ///< The type of the element the iterator can point to
-    typedef ValueType*                          pointer;                ///< The type of a pointer to an element the iterator can point to
-    typedef ValueType                           reference;              ///< The type of a reference to an element the iterator can point to
-    typedef std::random_access_iterator_tag     iterator_category;      ///< The iterator category
+    typedef CountingInputIterator self_type;                   ///< My own type
+    typedef OffsetT difference_type;                           ///< Type to express the result of subtracting one iterator from another
+    typedef ValueType value_type;                              ///< The type of the element the iterator can point to
+    typedef ValueType *pointer;                                ///< The type of a pointer to an element the iterator can point to
+    typedef ValueType reference;                               ///< The type of a reference to an element the iterator can point to
+    typedef std::random_access_iterator_tag iterator_category; ///< The iterator category
 
     ValueType val;
 
     /// Constructor
     inline CountingInputIterator(
-        const ValueType &val)          ///< Starting value for the iterator instance to report
-    :
-        val(val)
-    {}
+        const ValueType &val) ///< Starting value for the iterator instance to report
+        : val(val)
+    {
+    }
 
     /// Postfix increment
     inline self_type operator++(int)
@@ -144,7 +137,7 @@ struct CountingInputIterator
 
     /// Addition assignment
     template <typename Distance>
-    inline self_type& operator+=(Distance n)
+    inline self_type &operator+=(Distance n)
     {
         val += n;
         return *this;
@@ -160,7 +153,7 @@ struct CountingInputIterator
 
     /// Subtraction assignment
     template <typename Distance>
-    inline self_type& operator-=(Distance n)
+    inline self_type &operator-=(Distance n)
     {
         val -= n;
         return *this;
@@ -186,31 +179,28 @@ struct CountingInputIterator
     }
 
     /// Equal to
-    inline bool operator==(const self_type& rhs)
+    inline bool operator==(const self_type &rhs)
     {
         return (val == rhs.val);
     }
 
     /// Not equal to
-    inline bool operator!=(const self_type& rhs)
+    inline bool operator!=(const self_type &rhs)
     {
         return (val != rhs.val);
     }
 
     /// ostream operator
-    friend std::ostream& operator<<(std::ostream& os, const self_type& itr)
+    friend std::ostream &operator<<(std::ostream &os, const self_type &itr)
     {
         os << "[" << itr.val << "]";
         return os;
     }
 };
 
-
-
 //---------------------------------------------------------------------
 // MergePath Search
 //---------------------------------------------------------------------
-
 
 /**
  * Computes the begin offsets into A and B for the specific diagonal
@@ -221,12 +211,12 @@ template <
     typename OffsetT,
     typename CoordinateT>
 inline void MergePathSearch(
-    OffsetT         diagonal,           ///< [in]The diagonal to search
-    AIteratorT      a,                  ///< [in]List A
-    BIteratorT      b,                  ///< [in]List B
-    OffsetT         a_len,              ///< [in]Length of A
-    OffsetT         b_len,              ///< [in]Length of B
-    CoordinateT&    path_coordinate)    ///< [out] (x,y) coordinate where diagonal intersects the merge path
+    OffsetT diagonal,             ///< [in]The diagonal to search
+    AIteratorT a,                 ///< [in]List A
+    BIteratorT b,                 ///< [in]List B
+    OffsetT a_len,                ///< [in]Length of A
+    OffsetT b_len,                ///< [in]Length of B
+    CoordinateT &path_coordinate) ///< [out] (x,y) coordinate where diagonal intersects the merge path
 {
     OffsetT x_min = std::max(diagonal - b_len, 0);
     OffsetT x_max = std::min(diagonal, a_len);
@@ -235,16 +225,14 @@ inline void MergePathSearch(
     {
         OffsetT x_pivot = (x_min + x_max) >> 1;
         if (a[x_pivot] <= b[diagonal - x_pivot - 1])
-            x_min = x_pivot + 1;    // Contract range up A (down B)
+            x_min = x_pivot + 1; // Contract range up A (down B)
         else
-            x_max = x_pivot;        // Contract range down A (up B)
+            x_max = x_pivot; // Contract range down A (up B)
     }
 
     path_coordinate.x = std::min(x_min, a_len);
     path_coordinate.y = diagonal - x_min;
 }
-
-
 
 //---------------------------------------------------------------------
 // SpMV verification
@@ -255,12 +243,12 @@ template <
     typename ValueT,
     typename OffsetT>
 void SpmvGold(
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         vector_y_in,
-    ValueT*                         vector_y_out,
-    ValueT                          alpha,
-    ValueT                          beta)
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *vector_y_in,
+    ValueT *vector_y_out,
+    ValueT alpha,
+    ValueT beta)
 {
     for (OffsetT row = 0; row < a.num_rows; ++row)
     {
@@ -284,16 +272,16 @@ template <
     typename ValueT,
     typename OffsetT>
 void OmpCsrSpmv(
-    int                             num_threads,
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         vector_y_out)
+    int num_threads,
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *vector_y_out)
 {
-    #pragma omp parallel for schedule(static) num_threads(num_threads)
+#pragma omp parallel for schedule(static) num_threads(num_threads)
     for (OffsetT row = 0; row < a.num_rows; ++row)
     {
         ValueT partial = 0;
-        
+
         for (
             OffsetT offset = a.row_offsets[row];
             offset < a.row_offsets[row + 1];
@@ -305,7 +293,6 @@ void OmpCsrSpmv(
     }
 }
 
-
 /**
  * Run OmpCsrSpmv
  */
@@ -313,12 +300,12 @@ template <
     typename ValueT,
     typename OffsetT>
 float TestOmpCsrSpmv(
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         reference_vector_y_out,
-    ValueT*                         vector_y_out,
-    int                             timing_iterations,
-    float                           &setup_ms)
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *reference_vector_y_out,
+    ValueT *vector_y_out,
+    int timing_iterations,
+    float &setup_ms)
 {
     setup_ms = 0.0;
 
@@ -336,20 +323,21 @@ float TestOmpCsrSpmv(
     {
         // Check answer
         int compare = CompareResults(reference_vector_y_out, vector_y_out, a.num_rows, true);
-        printf("\t%s\n", compare ? "FAIL" : "PASS"); fflush(stdout);
+        printf("\t%s\n", compare ? "FAIL" : "PASS");
+        fflush(stdout);
     }
- 
+
     // Re-populate caches, etc.
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpCsrSpmv(g_omp_threads, a, vector_x, vector_y_out);
     }
-    
+
     // Timing
     float elapsed_ms = 0.0;
     CpuTimer timer;
     timer.Start();
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpCsrSpmv(g_omp_threads, a, vector_x, vector_y_out);
     }
@@ -359,12 +347,9 @@ float TestOmpCsrSpmv(
     return elapsed_ms / timing_iterations;
 }
 
-
-
 //---------------------------------------------------------------------
 // CPU merge-based SpMV
 //---------------------------------------------------------------------
-
 
 /**
  * OpenMP CPU merge-based SpMV
@@ -373,32 +358,32 @@ template <
     typename ValueT,
     typename OffsetT>
 void OmpMergeCsrmv(
-    int                             num_threads,
-    CsrMatrix<ValueT, OffsetT>&     a,
-    OffsetT*    __restrict        row_end_offsets,    ///< Merge list A (row end-offsets)
-    OffsetT*    __restrict        column_indices,
-    ValueT*     __restrict        values,
-    ValueT*     __restrict        vector_x,
-    ValueT*     __restrict        vector_y_out)
+    int num_threads,
+    CsrMatrix<ValueT, OffsetT> &a,
+    OffsetT *__restrict row_end_offsets, ///< Merge list A (row end-offsets)
+    OffsetT *__restrict column_indices,
+    ValueT *__restrict values,
+    ValueT *__restrict vector_x,
+    ValueT *__restrict vector_y_out)
 {
     // Temporary storage for inter-thread fix-up after load-balanced work
-    OffsetT     row_carry_out[256];     // The last row-id each worked on by each thread when it finished its path segment
-    ValueT      value_carry_out[256];   // The running total within each thread when it finished its path segment
+    OffsetT row_carry_out[256];  // The last row-id each worked on by each thread when it finished its path segment
+    ValueT value_carry_out[256]; // The running total within each thread when it finished its path segment
 
-    #pragma omp parallel for schedule(static) num_threads(num_threads)
+#pragma omp parallel for schedule(static) num_threads(num_threads)
     for (int tid = 0; tid < num_threads; tid++)
     {
         // Merge list B (NZ indices)
-        CountingInputIterator<OffsetT>  nonzero_indices(0);
+        CountingInputIterator<OffsetT> nonzero_indices(0);
 
-        OffsetT num_merge_items     = a.num_rows + a.num_nonzeros;                          // Merge path total length
-        OffsetT items_per_thread    = (num_merge_items + num_threads - 1) / num_threads;    // Merge items per thread
+        OffsetT num_merge_items = a.num_rows + a.num_nonzeros;                        // Merge path total length
+        OffsetT items_per_thread = (num_merge_items + num_threads - 1) / num_threads; // Merge items per thread
 
         // Find starting and ending MergePath coordinates (row-idx, nonzero-idx) for each thread
-        int2    thread_coord;
-        int2    thread_coord_end;
-        int     start_diagonal      = std::min(items_per_thread * tid, num_merge_items);
-        int     end_diagonal        = std::min(start_diagonal + items_per_thread, num_merge_items);
+        int2 thread_coord;
+        int2 thread_coord_end;
+        int start_diagonal = std::min(items_per_thread * tid, num_merge_items);
+        int end_diagonal = std::min(start_diagonal + items_per_thread, num_merge_items);
 
         MergePathSearch(start_diagonal, row_end_offsets, nonzero_indices, a.num_rows, a.num_nonzeros, thread_coord);
         MergePathSearch(end_diagonal, row_end_offsets, nonzero_indices, a.num_rows, a.num_nonzeros, thread_coord_end);
@@ -435,7 +420,6 @@ void OmpMergeCsrmv(
     }
 }
 
-
 /**
  * Run OmpMergeCsrmv
  */
@@ -443,12 +427,12 @@ template <
     typename ValueT,
     typename OffsetT>
 float TestOmpMergeCsrmv(
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         reference_vector_y_out,
-    ValueT*                         vector_y_out,
-    int                             timing_iterations,
-    float                           &setup_ms)
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *reference_vector_y_out,
+    ValueT *vector_y_out,
+    int timing_iterations,
+    float &setup_ms)
 {
     setup_ms = 0.0;
 
@@ -466,11 +450,12 @@ float TestOmpMergeCsrmv(
     {
         // Check answer
         int compare = CompareResults(reference_vector_y_out, vector_y_out, a.num_rows, true);
-        printf("\t%s\n", compare ? "FAIL" : "PASS"); fflush(stdout);
+        printf("\t%s\n", compare ? "FAIL" : "PASS");
+        fflush(stdout);
     }
- 
+
     // Re-populate caches, etc.
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpMergeCsrmv(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -479,7 +464,7 @@ float TestOmpMergeCsrmv(
     float elapsed_ms = 0.0;
     CpuTimer timer;
     timer.Start();
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpMergeCsrmv(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -495,10 +480,10 @@ template <
     typename OffsetT,
     typename CoordinateT>
 inline void RowPathSearch(
-    AIteratorT      a,                  ///< [in]List A
-    BIteratorT      b,                  ///< [in]List B
-    OffsetT         a_len,              ///< [in]Length of A
-    CoordinateT&    path_coordinate)    ///< [out] (x,y) coordinate where diagonal intersects the merge path
+    AIteratorT a,                 ///< [in]List A
+    BIteratorT b,                 ///< [in]List B
+    OffsetT a_len,                ///< [in]Length of A
+    CoordinateT &path_coordinate) ///< [out] (x,y) coordinate where diagonal intersects the merge path
 {
     OffsetT x_min = 0;
     OffsetT x_max = a_len;
@@ -507,9 +492,9 @@ inline void RowPathSearch(
     {
         OffsetT x_pivot = (x_min + x_max) >> 1;
         if (a[x_pivot] <= b[path_coordinate.y - 1])
-            x_min = x_pivot + 1;    // Contract range up A (down B)
+            x_min = x_pivot + 1; // Contract range up A (down B)
         else
-            x_max = x_pivot;        // Contract range down A (up B)
+            x_max = x_pivot; // Contract range down A (up B)
     }
 
     path_coordinate.x = std::min(x_min, a_len);
@@ -522,37 +507,37 @@ template <
     typename ValueT,
     typename OffsetT>
 void OmpNonzeroSplitCsrmm(
-    int                             num_threads,
-    CsrMatrix<ValueT, OffsetT>&     a,
-    OffsetT*    __restrict        row_end_offsets,    ///< Merge list A (row end-offsets)
-    OffsetT*    __restrict        column_indices,
-    ValueT*     __restrict        values,
-    ValueT*     __restrict        vector_x,
-    ValueT*     __restrict        vector_y_out)
+    int num_threads,
+    CsrMatrix<ValueT, OffsetT> &a,
+    OffsetT *__restrict row_end_offsets, ///< Merge list A (row end-offsets)
+    OffsetT *__restrict column_indices,
+    ValueT *__restrict values,
+    ValueT *__restrict vector_x,
+    ValueT *__restrict vector_y_out)
 {
     // Temporary storage for inter-thread fix-up after load-balanced work
-    OffsetT     row_carry_out[256];     // The last row-id each worked on by each thread when it finished its path segment
-    ValueT      value_carry_out[256];   // The running total within each thread when it finished its path segment
+    OffsetT row_carry_out[256];  // The last row-id each worked on by each thread when it finished its path segment
+    ValueT value_carry_out[256]; // The running total within each thread when it finished its path segment
 
-    #pragma omp parallel for schedule(static) num_threads(num_threads)
+#pragma omp parallel for schedule(static) num_threads(num_threads)
     for (int tid = 0; tid < num_threads; tid++)
     {
         // Merge list B (NZ indices)
-        CountingInputIterator<OffsetT>  nonzero_indices(0);
+        CountingInputIterator<OffsetT> nonzero_indices(0);
 
-        OffsetT num_nonzeros     = a.num_nonzeros;                          
-        OffsetT items_per_thread    = (num_nonzeros + num_threads - 1) / num_threads;
+        OffsetT num_nonzeros = a.num_nonzeros;
+        OffsetT items_per_thread = (num_nonzeros + num_threads - 1) / num_threads;
 
         // Find starting and ending MergePath coordinates (row-idx, nonzero-idx) for each thread
-        int2    thread_coord;
-        int2    thread_coord_end;
-        thread_coord.y            = std::min(items_per_thread * tid, num_nonzeros);
-        thread_coord_end.y        = std::min(thread_coord.y + items_per_thread, num_nonzeros);
+        int2 thread_coord;
+        int2 thread_coord_end;
+        thread_coord.y = std::min(items_per_thread * tid, num_nonzeros);
+        thread_coord_end.y = std::min(thread_coord.y + items_per_thread, num_nonzeros);
 
         RowPathSearch(row_end_offsets, nonzero_indices, a.num_rows, thread_coord);
         RowPathSearch(row_end_offsets, nonzero_indices, a.num_rows, thread_coord_end);
 
-                // Consume whole rows
+        // Consume whole rows
         for (; thread_coord.x < thread_coord_end.x; ++thread_coord.x)
         {
             ValueT running_total = 0.0;
@@ -588,12 +573,12 @@ template <
     typename ValueT,
     typename OffsetT>
 float TestOmpNonzeroSplitCsrmm(
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         reference_vector_y_out,
-    ValueT*                         vector_y_out,
-    int                             timing_iterations,
-    float                           &setup_ms)
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *reference_vector_y_out,
+    ValueT *vector_y_out,
+    int timing_iterations,
+    float &setup_ms)
 {
     setup_ms = 0.0;
 
@@ -611,11 +596,12 @@ float TestOmpNonzeroSplitCsrmm(
     {
         // Check answer
         int compare = CompareResults(reference_vector_y_out, vector_y_out, a.num_rows, true);
-        printf("\t%s\n", compare ? "FAIL" : "PASS"); fflush(stdout);
+        printf("\t%s\n", compare ? "FAIL" : "PASS");
+        fflush(stdout);
     }
-    
+
     // Re-populate caches, etc.
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -624,7 +610,7 @@ float TestOmpNonzeroSplitCsrmm(
     float elapsed_ms = 0.0;
     CpuTimer timer;
     timer.Start();
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -643,13 +629,13 @@ float TestOmpNonzeroSplitCsrmm(
  */
 template <typename OffsetT>
 void MklCsrmv(
-    int                           num_threads,
-    CsrMatrix<float, OffsetT>&    a,
-    OffsetT*    __restrict        row_end_offsets,    ///< Merge list A (row end-offsets)
-    OffsetT*    __restrict        column_indices,
-    float*      __restrict        values,
-    float*      __restrict        vector_x,
-    float*      __restrict        vector_y_out)
+    int num_threads,
+    CsrMatrix<float, OffsetT> &a,
+    OffsetT *__restrict row_end_offsets, ///< Merge list A (row end-offsets)
+    OffsetT *__restrict column_indices,
+    float *__restrict values,
+    float *__restrict vector_x,
+    float *__restrict vector_y_out)
 {
     mkl_cspblas_scsrgemv("n", &a.num_rows, a.values, a.row_offsets, a.column_indices, vector_x, vector_y_out);
 }
@@ -659,17 +645,16 @@ void MklCsrmv(
  */
 template <typename OffsetT>
 void MklCsrmv(
-    int                           num_threads,
-    CsrMatrix<double, OffsetT>&   a,
-    OffsetT*    __restrict        row_end_offsets,    ///< Merge list A (row end-offsets)
-    OffsetT*    __restrict        column_indices,
-    double*     __restrict        values,
-    double*     __restrict        vector_x,
-    double*     __restrict        vector_y_out)
+    int num_threads,
+    CsrMatrix<double, OffsetT> &a,
+    OffsetT *__restrict row_end_offsets, ///< Merge list A (row end-offsets)
+    OffsetT *__restrict column_indices,
+    double *__restrict values,
+    double *__restrict vector_x,
+    double *__restrict vector_y_out)
 {
     mkl_cspblas_dcsrgemv("n", &a.num_rows, a.values, a.row_offsets, a.column_indices, vector_x, vector_y_out);
 }
-
 
 /**
  * Run MKL CsrMV
@@ -678,12 +663,12 @@ template <
     typename ValueT,
     typename OffsetT>
 float TestMklCsrmv(
-    CsrMatrix<ValueT, OffsetT>&     a,
-    ValueT*                         vector_x,
-    ValueT*                         reference_vector_y_out,
-    ValueT*                         vector_y_out,
-    int                             timing_iterations,
-    float                           &setup_ms)
+    CsrMatrix<ValueT, OffsetT> &a,
+    ValueT *vector_x,
+    ValueT *reference_vector_y_out,
+    ValueT *vector_y_out,
+    int timing_iterations,
+    float &setup_ms)
 {
     setup_ms = 0.0;
 
@@ -694,13 +679,14 @@ float TestMklCsrmv(
     {
         // Check answer
         int compare = CompareResults(reference_vector_y_out, vector_y_out, a.num_rows, true);
-        printf("\t%s\n", compare ? "FAIL" : "PASS"); fflush(stdout);
+        printf("\t%s\n", compare ? "FAIL" : "PASS");
+        fflush(stdout);
 
         // memset(vector_y_out, -1, sizeof(ValueT) * a.num_rows);
     }
 
     // Re-populate caches, etc.
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         MklCsrmv(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -709,7 +695,7 @@ float TestMklCsrmv(
     float elapsed_ms = 0.0;
     CpuTimer timer;
     timer.Start();
-    for(int it = 0; it < timing_iterations; ++it)
+    for (int it = 0; it < timing_iterations; ++it)
     {
         MklCsrmv(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, vector_x, vector_y_out);
     }
@@ -718,7 +704,6 @@ float TestMklCsrmv(
 
     return elapsed_ms / timing_iterations;
 }
-
 
 //---------------------------------------------------------------------
 // Test generation
@@ -729,33 +714,32 @@ float TestMklCsrmv(
  */
 template <typename ValueT, typename OffsetT>
 void DisplayPerf(
-    double                          setup_ms,
-    double                          avg_ms,
-    CsrMatrix<ValueT, OffsetT>&     csr_matrix)
+    double setup_ms,
+    double avg_ms,
+    CsrMatrix<ValueT, OffsetT> &csr_matrix)
 {
     double nz_throughput, effective_bandwidth;
     size_t total_bytes = (csr_matrix.num_nonzeros * (sizeof(ValueT) * 2 + sizeof(OffsetT))) +
-        (csr_matrix.num_rows) * (sizeof(OffsetT) + sizeof(ValueT));
+                         (csr_matrix.num_rows) * (sizeof(OffsetT) + sizeof(ValueT));
 
-    nz_throughput       = double(csr_matrix.num_nonzeros) / avg_ms / 1.0e6;
+    nz_throughput = double(csr_matrix.num_nonzeros) / avg_ms / 1.0e6;
     effective_bandwidth = double(total_bytes) / avg_ms / 1.0e6;
 
     if (!g_quiet)
         printf("fp%d: %.4f setup ms, %.4f avg ms, %.5f gflops, %.3lf effective GB/s\n",
-            int(sizeof(ValueT) * 8),
-            setup_ms,
-            avg_ms,
-            2 * nz_throughput,
-            effective_bandwidth);
+               int(sizeof(ValueT) * 8),
+               setup_ms,
+               avg_ms,
+               2 * nz_throughput,
+               effective_bandwidth);
     else
         printf("%.5f, %.5f, %.6f, %.3lf, ",
-            setup_ms, avg_ms,
-            2 * nz_throughput,
-            effective_bandwidth);
+               setup_ms, avg_ms,
+               2 * nz_throughput,
+               effective_bandwidth);
 
     fflush(stdout);
 }
-
 
 /**
  * Run tests
@@ -764,15 +748,15 @@ template <
     typename ValueT,
     typename OffsetT>
 void RunTests(
-    ValueT              alpha,
-    ValueT              beta,
-    const std::string&  mtx_filename,
-    int                 grid2d,
-    int                 grid3d,
-    int                 wheel,
-    int                 dense,
-    int                 timing_iterations,
-    CommandLineArgs&    args)
+    ValueT alpha,
+    ValueT beta,
+    const std::string &mtx_filename,
+    int grid2d,
+    int grid3d,
+    int wheel,
+    int dense,
+    int timing_iterations,
+    CommandLineArgs &args)
 {
     // Initialize matrix in COO form
     CooMatrix<ValueT, OffsetT> coo_matrix;
@@ -784,34 +768,40 @@ void RunTests(
 
         if ((coo_matrix.num_rows == 1) || (coo_matrix.num_cols == 1) || (coo_matrix.num_nonzeros == 1))
         {
-            if (!g_quiet) printf("Trivial dataset\n");
+            if (!g_quiet)
+                printf("Trivial dataset\n");
             exit(0);
         }
-        printf("%s, ", mtx_filename.c_str()); fflush(stdout);
+        printf("%s, ", mtx_filename.c_str());
+        fflush(stdout);
     }
     else if (grid2d > 0)
     {
         // Generate 2D lattice
-        printf("grid2d_%d, ", grid2d); fflush(stdout);
+        printf("grid2d_%d, ", grid2d);
+        fflush(stdout);
         coo_matrix.InitGrid2d(grid2d, false);
     }
     else if (grid3d > 0)
     {
         // Generate 3D lattice
-        printf("grid3d_%d, ", grid3d); fflush(stdout);
+        printf("grid3d_%d, ", grid3d);
+        fflush(stdout);
         coo_matrix.InitGrid3d(grid3d, false);
     }
     else if (wheel > 0)
     {
         // Generate wheel graph
-        printf("wheel_%d, ", grid2d); fflush(stdout);
+        printf("wheel_%d, ", grid2d);
+        fflush(stdout);
         coo_matrix.InitWheel(wheel);
     }
     else if (dense > 0)
     {
         // Generate dense graph
-        OffsetT rows = (1<<24) / dense;               // 16M nnz
-        printf("dense_%d_x_%d, ", rows, dense); fflush(stdout);
+        OffsetT rows = (1 << 24) / dense; // 16M nnz
+        printf("dense_%d_x_%d, ", rows, dense);
+        fflush(stdout);
         coo_matrix.InitDense(rows, dense);
     }
     else
@@ -844,22 +834,22 @@ void RunTests(
             printf("\t%d timing iterations\n", timing_iterations);
     }
 
-    // Allocate input and output vectors (if available, use NUMA allocation to force storage on the 
+    // Allocate input and output vectors (if available, use NUMA allocation to force storage on the
     // sockets for performance consistency)
     ValueT *vector_x, *vector_y_in, *reference_vector_y_out, *vector_y_out;
     if (csr_matrix.IsNumaMalloc())
     {
-        vector_x                = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_cols, 0);
-        vector_y_in             = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
-        reference_vector_y_out  = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
-        vector_y_out            = (ValueT*) numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
+        vector_x = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_cols, 0);
+        vector_y_in = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
+        reference_vector_y_out = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
+        vector_y_out = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * csr_matrix.num_rows, 0);
     }
     else
     {
-        vector_x                = (ValueT*) mkl_malloc(sizeof(ValueT) * csr_matrix.num_cols, 4096);
-        vector_y_in             = (ValueT*) mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
-        reference_vector_y_out  = (ValueT*) mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
-        vector_y_out            = (ValueT*) mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
+        vector_x = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_cols, 4096);
+        vector_y_in = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
+        reference_vector_y_out = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
+        vector_y_out = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows, 4096);
     }
 
     for (int col = 0; col < csr_matrix.num_cols; ++col)
@@ -874,47 +864,60 @@ void RunTests(
     float avg_ms, setup_ms;
 
     // Simple SpMV
-    if (!g_quiet) printf("\n\n");
-    printf("Simple CsrMV, "); fflush(stdout);
+    if (!g_quiet)
+        printf("\n\n");
+    printf("Simple CsrMV, ");
+    fflush(stdout);
     avg_ms = TestOmpCsrSpmv(csr_matrix, vector_x, reference_vector_y_out, vector_y_out, timing_iterations, setup_ms);
     DisplayPerf(setup_ms, avg_ms, csr_matrix);
 
     // Merge SpMV
-    if (!g_quiet) printf("\n\n");
-    printf("Merge CsrMV, "); fflush(stdout);
+    if (!g_quiet)
+        printf("\n\n");
+    printf("Merge CsrMV, ");
+    fflush(stdout);
     avg_ms = TestOmpMergeCsrmv(csr_matrix, vector_x, reference_vector_y_out, vector_y_out, timing_iterations, setup_ms);
     DisplayPerf(setup_ms, avg_ms, csr_matrix);
 
-    if (!g_quiet) printf("\n\n");
-    printf("Nonzero CsrMV, "); fflush(stdout);
+    if (!g_quiet)
+        printf("\n\n");
+    printf("Nonzero CsrMV, ");
+    fflush(stdout);
     avg_ms = TestOmpNonzeroSplitCsrmm(csr_matrix, vector_x, reference_vector_y_out, vector_y_out, timing_iterations, setup_ms);
     DisplayPerf(setup_ms, avg_ms, csr_matrix);
 
     // MKL SpMV
-    if (!g_quiet) printf("\n\n");
-    printf("MKL CsrMV, "); fflush(stdout);
+    if (!g_quiet)
+        printf("\n\n");
+    printf("MKL CsrMV, ");
+    fflush(stdout);
     avg_ms = TestMklCsrmv(csr_matrix, vector_x, reference_vector_y_out, vector_y_out, timing_iterations, setup_ms);
     DisplayPerf(setup_ms, avg_ms, csr_matrix);
 
     // Cleanup
     if (csr_matrix.IsNumaMalloc())
     {
-        if (vector_x)                   numa_free(vector_x, sizeof(ValueT) * csr_matrix.num_cols);
-        if (vector_y_in)                numa_free(vector_y_in, sizeof(ValueT) * csr_matrix.num_rows);
-        if (reference_vector_y_out)     numa_free(reference_vector_y_out, sizeof(ValueT) * csr_matrix.num_rows);
-        if (vector_y_out)               numa_free(vector_y_out, sizeof(ValueT) * csr_matrix.num_rows);
+        if (vector_x)
+            numa_free(vector_x, sizeof(ValueT) * csr_matrix.num_cols);
+        if (vector_y_in)
+            numa_free(vector_y_in, sizeof(ValueT) * csr_matrix.num_rows);
+        if (reference_vector_y_out)
+            numa_free(reference_vector_y_out, sizeof(ValueT) * csr_matrix.num_rows);
+        if (vector_y_out)
+            numa_free(vector_y_out, sizeof(ValueT) * csr_matrix.num_rows);
     }
     else
     {
-        if (vector_x)                   mkl_free(vector_x);
-        if (vector_y_in)                mkl_free(vector_y_in);
-        if (reference_vector_y_out)     mkl_free(reference_vector_y_out);
-        if (vector_y_out)               mkl_free(vector_y_out);
+        if (vector_x)
+            mkl_free(vector_x);
+        if (vector_y_in)
+            mkl_free(vector_y_in);
+        if (reference_vector_y_out)
+            mkl_free(reference_vector_y_out);
+        if (vector_y_out)
+            mkl_free(vector_y_out);
     }
-
 }
-
-
 
 /**
  * Main
@@ -935,28 +938,29 @@ int main(int argc, char **argv)
             "[--alpha=<alpha scalar (default: 1.0)>] "
             "[--beta=<beta scalar (default: 0.0)>] "
             "\n\t"
-                "--mtx=<matrix market file> "
+            "--mtx=<matrix market file> "
             "\n\t"
-                "--dense=<cols>"
+            "--dense=<cols>"
             "\n\t"
-                "--grid2d=<width>"
+            "--grid2d=<width>"
             "\n\t"
-                "--grid3d=<width>"
+            "--grid3d=<width>"
             "\n\t"
-                "--wheel=<spokes>"
-            "\n", argv[0]);
+            "--wheel=<spokes>"
+            "\n",
+            argv[0]);
         exit(0);
     }
 
-    bool                fp32;
-    std::string         mtx_filename;
-    int                 grid2d              = -1;
-    int                 grid3d              = -1;
-    int                 wheel               = -1;
-    int                 dense               = -1;
-    int                 timing_iterations   = -1;
-    float               alpha               = 1.0;
-    float               beta                = 0.0;
+    bool fp32;
+    std::string mtx_filename;
+    int grid2d = -1;
+    int grid3d = -1;
+    int wheel = -1;
+    int dense = -1;
+    int timing_iterations = -1;
+    float alpha = 1.0;
+    float beta = 0.0;
 
     g_verbose = args.CheckCmdLineFlag("v");
     g_verbose2 = args.CheckCmdLineFlag("v2");
