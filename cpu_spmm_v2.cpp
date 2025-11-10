@@ -302,7 +302,7 @@ void OmpCsrSpmmT(
 #pragma omp parallel for schedule(static) num_threads(num_threads)
     for (OffsetT row = 0; row < a.num_rows; ++row)
     {
-        ValueT partial[num_vectors] = {0.0};
+        std::vector<ValueT> partial(num_vectors, 0.0);
         for (
             OffsetT offset = a.row_offsets[row];
             offset < a.row_offsets[row + 1];
@@ -545,7 +545,7 @@ void OmpMergeCsrmm(
         MergePathSearch(end_diagonal, row_end_offsets, nonzero_indices, a.num_rows, a.num_nonzeros, thread_coord_end);
 
         // Consume whole rows
-        ValueT running_total[num_vectors] = {0.0};
+        std::vector<ValueT> running_total(num_vectors, 0.0);
         ValueT val;
         int ind;
         ValueT *tmp;
@@ -585,7 +585,7 @@ void OmpMergeCsrmm(
 
         // Save carry-outs
         row_carry_out[tid] = thread_coord_end.x;
-        value_carry_out[tid] = running_total;
+        value_carry_out[tid] = running_total.data();
     }
 
     // Carry-out fix-up (rows spanning multiple threads)
@@ -731,7 +731,7 @@ void OmpNonzeroSplitCsrmm(
         RowPathSearch(row_end_offsets, nonzero_indices, a.num_rows, thread_coord_end);
 
         // Consume whole rows
-        ValueT running_total[num_vectors] = {0.0};
+        std::vector<ValueT> running_total(num_vectors, 0.0);
         ValueT val;
         ValueT *tmp;
         int ind;
@@ -771,7 +771,7 @@ void OmpNonzeroSplitCsrmm(
 
         // Save carry-outs
         row_carry_out[tid] = thread_coord_end.x;
-        value_carry_out[tid] = running_total;
+        value_carry_out[tid] = running_total.data();
     }
 
     // Carry-out fix-up (rows spanning multiple threads)

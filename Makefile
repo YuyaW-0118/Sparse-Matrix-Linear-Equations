@@ -129,12 +129,12 @@ endif
 #-------------------------------------------------------------------------------
 
 # OMP compiler
-OMPCC=icpc
-OMPCC_FLAGS=-qopenmp -O3 -lrt -fno-alias -xHost -lnuma -O3 -mkl
-OMPCC_FLAGS_sse=-qopenmp -lrt -fno-alias -xSSE4.2 -lnuma -mkl
-OMPCC_FLAGS_avx512=-qopenmp -O3 -lrt -fno-alias -xCOMMON-AVX512 -lnuma -mkl
-OMPCC_FLAGS_avx=-qopenmp -O3 -lrt -fno-alias -xCORE-AVX2 -lnuma -mkl
- 
+OMPCC=icpx
+OMPCC_FLAGS=-qopenmp -O3 -lrt -fno-alias -march=native -lnuma -qmkl
+OMPCC_FLAGS_sse=-qopenmp -O3 -lrt -fno-alias -msse4.2 -lnuma -qmkl
+OMPCC_FLAGS_avx512=-qopenmp -O3 -lrt -fno-alias -mavx512f -mavx512dq -lnuma -qmkl
+OMPCC_FLAGS_avx=-qopenmp -O3 -lrt -fno-alias -mavx2 -mfma -lnuma -qmkl
+
 # Includes
 INC += -I$(CUB_DIR) -I$(CUB_DIR)test 
 
@@ -156,7 +156,7 @@ DEPS = 	$(call rwildcard, $(CUB_DIR),*.cuh) \
 #-------------------------------------------------------------------------------
 
 clean :
-	rm -f _gpu_spmv_driver _cpu_spmv_driver _cpu_spmm_driver
+	rm -f _gpu_spmv_driver _cpu_spmv_driver _cpu_spmm_driver _cpu_multicg_driver
 
 		
 #-------------------------------------------------------------------------------
@@ -175,10 +175,13 @@ cpu_spmv : cpu_spmv.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_spmv_driver cpu_spmv.cpp $(OMPCC_FLAGS_avx512)
 
 cpu_spmm : cpu_spmm_v2.cpp $(DEPS)
-	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_spmm_driver cpu_spmm_v2.cpp $(OMPCC_FLAGS_avx512)
+	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_spmm_driver cpu_spmm_v2.cpp $(OMPCC_FLAGS_avx)
 
 axpy : axpy.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o test_axpy axpy.cpp $(OMPCC_FLAGS_avx512)
 
 merge_spmm : merge_spmm_test.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o merge_spmm merge_spmm_test.cpp $(OMPCC_FLAGS3)
+
+cpu_multicg: cpu_multicg.cpp $(DEPS)
+	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_multicg_driver cpu_multicg.cpp $(OMPCC_FLAGS_avx)

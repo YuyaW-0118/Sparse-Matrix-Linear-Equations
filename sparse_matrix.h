@@ -768,6 +768,11 @@ struct CsrMatrix
         values = NULL;
     }
 
+    /*
+     * Default constructor
+     */
+    CsrMatrix() : num_rows(0), num_cols(0), num_nonzeros(0), row_offsets(NULL), column_indices(NULL), values(NULL) {}
+
     /**
      * Constructor
      */
