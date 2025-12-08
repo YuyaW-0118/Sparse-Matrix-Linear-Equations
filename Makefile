@@ -171,6 +171,8 @@ gpu_spmv : gpu_spmv.cu $(DEPS)
 # make cpu_spmv
 #-------------------------------------------------------------------------------
 
+# init: source /opt/intel/oneapi/setvars.sh
+
 cpu_spmv : cpu_spmv.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_spmv_driver cpu_spmv.cpp $(OMPCC_FLAGS_avx512)
 
