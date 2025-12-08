@@ -87,14 +87,11 @@ int CGSolveMultiple(
 {
 	OffsetT n = a.num_rows;
 	ValueT *R, *P, *AP;
-	ValueT *vector_x_row_major_dummy = nullptr; // For SpMM interface
 
 	// Allocate temporary matrices
 	R = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
 	P = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
 	AP = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
-
-	ValueT *P_row_major = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
 
 	// Allocate temporary scalar arrays
 	ValueT *alpha = (ValueT *)mkl_malloc(sizeof(ValueT) * num_vectors, 4096);
@@ -114,7 +111,6 @@ int CGSolveMultiple(
 		P[i] = B[i];
 	}
 
-	int num_converged = 0;
 	dot_multiple(n, num_vectors, B, B, b_norms);
 #pragma omp parallel for
 	for (int i = 0; i < num_vectors; ++i)
@@ -135,13 +131,13 @@ int CGSolveMultiple(
 		switch (kernel_type)
 		{
 		case SIMPLE:
-			OmpCsrSpmmT(g_omp_threads, a, P, AP, num_vectors, P_row_major);
+			OmpCsrSpmmT(g_omp_threads, a, P, AP, num_vectors);
 			break;
 		case MERGE:
-			OmpMergeCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors, P_row_major);
+			OmpMergeCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors);
 			break;
 		case NONZERO_SPLIT:
-			OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors, P_row_major);
+			OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors);
 			break;
 		}
 
@@ -171,7 +167,7 @@ int CGSolveMultiple(
 		dot_multiple(n, num_vectors, R, R, rs_new);
 
 		// Convergence check
-		num_converged = 0;
+		int num_converged = 0;
 #pragma omp parallel for reduction(+ : num_converged)
 		for (int i = 0; i < num_vectors; ++i)
 		{
@@ -217,7 +213,6 @@ int CGSolveMultiple(
 	mkl_free(R);
 	mkl_free(P);
 	mkl_free(AP);
-	mkl_free(P_row_major);
 	mkl_free(alpha);
 	mkl_free(beta);
 	mkl_free(rs_old);
@@ -299,8 +294,6 @@ int PCGSolveMultiple(
 	Z = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096); // z = M^-1 * r
 	ValueT *temp_y = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
 
-	ValueT *P_row_major = (ValueT *)mkl_malloc(sizeof(ValueT) * n * num_vectors, 4096);
-
 	ValueT *alpha = (ValueT *)mkl_malloc(sizeof(ValueT) * num_vectors, 4096);
 	ValueT *beta = (ValueT *)mkl_malloc(sizeof(ValueT) * num_vectors, 4096);
 	ValueT *rho_old = (ValueT *)mkl_malloc(sizeof(ValueT) * num_vectors, 4096);
@@ -345,13 +338,13 @@ int PCGSolveMultiple(
 		switch (kernel_type)
 		{
 		case SIMPLE:
-			OmpCsrSpmmT(g_omp_threads, a, P, AP, num_vectors, P_row_major);
+			OmpCsrSpmmT(g_omp_threads, a, P, AP, num_vectors);
 			break;
 		case MERGE:
-			OmpMergeCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors, P_row_major);
+			OmpMergeCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors);
 			break;
 		case NONZERO_SPLIT:
-			OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors, P_row_major);
+			OmpNonzeroSplitCsrmm(g_omp_threads, a, a.row_offsets + 1, a.column_indices, a.values, P, AP, num_vectors);
 			break;
 		}
 
@@ -418,7 +411,6 @@ int PCGSolveMultiple(
 	mkl_free(P);
 	mkl_free(AP);
 	mkl_free(Z);
-	mkl_free(P_row_major);
 	mkl_free(temp_y);
 	mkl_free(alpha);
 	mkl_free(beta);
@@ -536,13 +528,10 @@ void RunCgTests(
 
 	// Initialize RHS vectors with random values
 	srand(12345);
-#pragma omp parallel for
 	for (long long i = 0; i < (long long)csr_matrix.num_rows * num_vectors; ++i)
 		b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
 
 	// --- Test Execution & Display Performance ---
-	// double avg_ms;
-	// double average_iters;
 	double min_ms;
 	double iters_of_min_ms;
 	double gflops;
@@ -637,7 +626,7 @@ int main(int argc, char **argv)
 	std::string mtx_filename;
 	int max_iters = 100000;
 	double tolerance = 1.0e-5;
-	int num_vectors = 16;
+	int num_vectors = 32;
 
 	g_verbose = args.CheckCmdLineFlag("v");
 	g_verbose2 = args.CheckCmdLineFlag("v2");

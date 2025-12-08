@@ -8,17 +8,31 @@
 template <typename ValueT, typename OffsetT>
 inline void dot_multiple(OffsetT n, int num_vectors, const ValueT *x, const ValueT *y, ValueT *result)
 {
-#pragma omp parallel for
-	for (int i = 0; i < num_vectors; ++i)
+	for (int i = 0; i < num_vectors; i++)
+		result[i] = 0.0;
+#pragma omp parallel
 	{
-		ValueT local_result = 0.0;
-		const ValueT *x_col = x + (long long)i * n;
-		const ValueT *y_col = y + (long long)i * n;
+		std::vector<ValueT> local_result(num_vectors, 0.0);
+
+#pragma omp for nowait
 		for (OffsetT j = 0; j < n; ++j)
 		{
-			local_result += x_col[j] * y_col[j];
+			const ValueT *x_row = x + (long long)j * num_vectors;
+			const ValueT *y_row = y + (long long)j * num_vectors;
+
+			for (int i = 0; i < num_vectors; ++i)
+			{
+				local_result[i] += x_row[i] * y_row[i];
+			}
 		}
-		result[i] = local_result;
+
+#pragma omp critical
+		{
+			for (int i = 0; i < num_vectors; ++i)
+			{
+				result[i] += local_result[i];
+			}
+		}
 	}
 }
 
@@ -27,31 +41,30 @@ template <typename ValueT, typename OffsetT>
 inline void axpy_multiple(OffsetT n, int num_vectors, const ValueT *a, const ValueT *x, ValueT *y)
 {
 #pragma omp parallel for
-	for (int i = 0; i < num_vectors; ++i)
+	for (OffsetT j = 0; j < n; ++j)
 	{
-		ValueT scalar_a = a[i];
-		ValueT *y_col = y + (long long)i * n;
-		const ValueT *x_col = x + (long long)i * n;
-		for (OffsetT j = 0; j < n; ++j)
+		ValueT *y_row = y + (long long)j * num_vectors;
+		const ValueT *x_row = x + (long long)j * num_vectors;
+
+		for (int i = 0; i < num_vectors; ++i)
 		{
-			y_col[j] += scalar_a * x_col[j];
+			y_row[i] += a[i] * x_row[i];
 		}
 	}
 }
-
 // p_i = r_i + beta[i] * p_i
 template <typename ValueT, typename OffsetT>
 inline void update_p_multiple(OffsetT n, int num_vectors, const ValueT *r, const ValueT *beta, ValueT *p)
 {
 #pragma omp parallel for
-	for (int i = 0; i < num_vectors; ++i)
+	for (OffsetT j = 0; j < n; ++j)
 	{
-		ValueT scalar_beta = beta[i];
-		const ValueT *r_col = r + (long long)i * n;
-		ValueT *p_col = p + (long long)i * n;
-		for (OffsetT j = 0; j < n; ++j)
+		const ValueT *r_row = r + (long long)j * num_vectors;
+		ValueT *p_row = p + (long long)j * num_vectors;
+
+		for (int i = 0; i < num_vectors; ++i)
 		{
-			p_col[j] = r_col[j] + scalar_beta * p_col[j];
+			p_row[i] = r_row[i] + beta[i] * p_row[i];
 		}
 	}
 }

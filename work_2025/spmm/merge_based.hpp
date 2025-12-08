@@ -54,8 +54,7 @@ inline void OmpMergeCsrmm(
 	ValueT *__restrict values,
 	ValueT *__restrict vector_x,
 	ValueT *__restrict vector_y_out,
-	int num_vectors,
-	ValueT *__restrict vector_x_row_major)
+	int num_vectors)
 {
 	// Temporary storage for inter-thread fix-up after load-balanced work
 	OffsetT *row_carry_out = new OffsetT[num_threads];							// The last row-id each worked on by each thread when it finished its path segment
@@ -63,14 +62,6 @@ inline void OmpMergeCsrmm(
 
 	int num_cols = a.num_cols;
 	int num_rows = a.num_rows;
-
-	if (!g_input_row_major)
-	{
-#pragma omp parallel for schedule(static) num_threads(num_threads)
-		for (int i = 0; i < num_rows; i++)
-			for (int j = 0; j < num_vectors; j++)
-				vector_x_row_major[i * num_vectors + j] = vector_x[i + (long long)j * num_rows];
-	}
 
 #pragma omp parallel for schedule(static) num_threads(num_threads)
 	for (int tid = 0; tid < num_threads; tid++)
@@ -89,8 +80,12 @@ inline void OmpMergeCsrmm(
 
 		MergePathSearch(start_diagonal, row_end_offsets, nonzero_indices, a.num_rows, a.num_nonzeros, thread_coord);
 		MergePathSearch(end_diagonal, row_end_offsets, nonzero_indices, a.num_rows, a.num_nonzeros, thread_coord_end);
+
 		// Consume whole rows
-		std::vector<ValueT> running_total(num_vectors, 0.0);
+		ValueT running_total[num_vectors];
+		for (int i = 0; i < num_vectors; i++)
+			running_total[i] = 0.0;
+
 		ValueT val;
 		int ind;
 		ValueT *tmp;
@@ -100,31 +95,21 @@ inline void OmpMergeCsrmm(
 			{
 				val = values[thread_coord.y];
 				ind = column_indices[thread_coord.y] * num_vectors;
-				tmp = vector_x_row_major + ind;
+				tmp = vector_x + ind;
+#pragma omp simd
 				for (int i = 0; i < num_vectors; i++)
 				{
 					running_total[i] += val * tmp[i];
 				}
 			}
 
-			if (g_output_row_major)
+			ind = thread_coord.x * num_vectors;
+			tmp = vector_y_out + ind;
+#pragma omp simd
+			for (int i = 0; i < num_vectors; i++)
 			{
-				ind = thread_coord.x * num_vectors;
-				tmp = vector_y_out + ind;
-				for (int i = 0; i < num_vectors; i++)
-				{
-					tmp[i] = running_total[i];
-					running_total[i] = 0.0;
-				}
-			}
-			else
-			{
-				OffsetT row_idx = thread_coord.x;
-				for (int i = 0; i < num_vectors; i++)
-				{
-					vector_y_out[row_idx + (long long)i * num_rows] = running_total[i];
-					running_total[i] = 0.0;
-				}
+				tmp[i] = running_total[i];
+				running_total[i] = 0.0;
 			}
 		}
 
@@ -133,7 +118,8 @@ inline void OmpMergeCsrmm(
 		{
 			val = values[thread_coord.y];
 			ind = column_indices[thread_coord.y] * num_vectors;
-			tmp = vector_x_row_major + ind;
+			tmp = vector_x + ind;
+#pragma omp simd
 			for (int i = 0; i < num_vectors; i++)
 			{
 				running_total[i] += val * tmp[i];
@@ -144,7 +130,8 @@ inline void OmpMergeCsrmm(
 		row_carry_out[tid] = thread_coord_end.x;
 
 		ValueT *my_carry_out_dest = value_carry_out + (long long)tid * num_vectors;
-		std::copy(running_total.begin(), running_total.end(), my_carry_out_dest);
+		for (int i = 0; i < num_vectors; i++)
+			my_carry_out_dest[i] = running_total[i];
 	}
 
 	// Carry-out fix-up (rows spanning multiple threads)
@@ -154,8 +141,10 @@ inline void OmpMergeCsrmm(
 		if (row_idx < a.num_rows)
 		{
 			ValueT *my_carry_out_src = value_carry_out + (long long)tid * num_vectors;
+			OffsetT out_idx = row_idx * num_vectors;
+#pragma omp simd
 			for (int i = 0; i < num_vectors; i++)
-				vector_y_out[row_idx + (long long)i * num_rows] += my_carry_out_src[i];
+				vector_y_out[out_idx + i] += my_carry_out_src[i];
 		}
 	}
 

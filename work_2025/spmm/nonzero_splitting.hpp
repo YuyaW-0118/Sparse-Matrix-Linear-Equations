@@ -57,23 +57,11 @@ inline void OmpNonzeroSplitCsrmm(
 	ValueT *__restrict values,
 	ValueT *__restrict vector_x,
 	ValueT *__restrict vector_y_out,
-	int num_vectors,
-	ValueT *__restrict vector_x_row_major)
+	int num_vectors)
 {
 	// Temporary storage for inter-thread fix-up after load-balanced work
 	OffsetT *row_carry_out = new OffsetT[num_threads];							// The last row-id each worked on by each thread when it finished its path segment
 	ValueT *value_carry_out = new ValueT[(long long)num_threads * num_vectors]; // The running total within each thread when it finished its path segment
-
-	int num_cols = a.num_cols;
-	int num_rows = a.num_rows;
-
-	if (!g_input_row_major)
-	{
-#pragma omp parallel for schedule(static) num_threads(num_threads)
-		for (int i = 0; i < num_rows; i++)
-			for (int j = 0; j < num_vectors; j++)
-				vector_x_row_major[i * num_vectors + j] = vector_x[j * num_rows + i];
-	}
 
 #pragma omp parallel for schedule(static) num_threads(num_threads)
 	for (int tid = 0; tid < num_threads; tid++)
@@ -104,32 +92,20 @@ inline void OmpNonzeroSplitCsrmm(
 			{
 				val = values[thread_coord.y];
 				ind = column_indices[thread_coord.y] * num_vectors;
-				tmp = vector_x_row_major + ind;
+				tmp = vector_x + ind;
+#pragma omp simd
 				for (int i = 0; i < num_vectors; i++)
 				{
 					running_total[i] += val * tmp[i];
 				}
 			}
-
-			if (g_output_row_major) // g_output_row_major が利用可能であると仮定
+			ind = thread_coord.x * num_vectors;
+			tmp = vector_y_out + ind;
+#pragma omp simd
+			for (int i = 0; i < num_vectors; i++)
 			{
-				ind = thread_coord.x * num_vectors;
-				tmp = vector_y_out + ind;
-				for (int i = 0; i < num_vectors; i++)
-				{
-					tmp[i] = running_total[i];
-					running_total[i] = 0.0;
-				}
-			}
-			else
-			{
-				OffsetT row_idx = thread_coord.x;
-				for (int i = 0; i < num_vectors; i++)
-				{
-					// Column-Major で書き込み
-					vector_y_out[row_idx + (long long)i * num_rows] = running_total[i];
-					running_total[i] = 0.0;
-				}
+				tmp[i] = running_total[i];
+				running_total[i] = 0.0;
 			}
 		}
 
@@ -138,7 +114,8 @@ inline void OmpNonzeroSplitCsrmm(
 		{
 			val = values[thread_coord.y];
 			ind = column_indices[thread_coord.y] * num_vectors;
-			tmp = vector_x_row_major + ind;
+			tmp = vector_x + ind;
+#pragma omp simd
 			for (int i = 0; i < num_vectors; i++)
 			{
 				running_total[i] += val * tmp[i];
@@ -159,8 +136,12 @@ inline void OmpNonzeroSplitCsrmm(
 		if (row_idx < a.num_rows)
 		{
 			ValueT *my_carry_out_src = value_carry_out + (long long)tid * num_vectors;
+			OffsetT out_idx = row_idx * num_vectors;
+#pragma omp simd
 			for (int i = 0; i < num_vectors; i++)
-				vector_y_out[row_idx + (long long)i * num_rows] += my_carry_out_src[i];
+			{
+				vector_y_out[out_idx + i] += my_carry_out_src[i];
+			}
 		}
 	}
 
