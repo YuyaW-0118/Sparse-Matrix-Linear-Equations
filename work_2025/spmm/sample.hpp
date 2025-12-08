@@ -1,7 +1,7 @@
 #ifndef SAMPLE_HPP
 #define SAMPLE_HPP
 
-#include <sparse_matrix.h>
+#include "../../sparse_matrix.h"
 
 //---------------------------------------------------------------------
 // SpMV verification

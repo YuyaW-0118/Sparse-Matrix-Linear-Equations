@@ -4,7 +4,7 @@
 #include <mkl.h>
 #include <omp.h>
 
-#include <sparse_matrix.h>
+#include "../../sparse_matrix.h"
 
 /**
  * Transposes a CSR matrix.

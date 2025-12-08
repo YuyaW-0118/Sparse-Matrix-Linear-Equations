@@ -4,9 +4,9 @@
 #include <omp.h>
 #include <mkl.h>
 
-#include <sparse_matrix.h>
-#include <utils.h>
-#include <work_2025/hyper_parameters.hpp>
+#include "../../sparse_matrix.h"
+#include "../../utils.h"
+#include "../hyper_parameters.hpp"
 
 // Simple SpMV y = Ax
 template <

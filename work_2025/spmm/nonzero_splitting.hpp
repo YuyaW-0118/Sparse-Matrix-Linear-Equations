@@ -6,10 +6,10 @@
 
 #include <omp.h>
 
-#include <sparse_matrix.h>
-#include <work_2025/types.hpp>
-#include <work_2025/hyper_parameters.hpp>
-#include <work_2025/spmm/utils.hpp>
+#include "../../sparse_matrix.h"
+#include "../types.hpp"
+#include "../hyper_parameters.hpp"
+#include "utils.hpp"
 
 template <
 	typename AIteratorT,
