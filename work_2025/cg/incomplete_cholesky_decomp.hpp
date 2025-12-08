@@ -18,9 +18,9 @@ inline void TransposeCsr(
 	out.num_cols = in.num_rows;
 	out.num_nonzeros = in.num_nonzeros;
 
-	out.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (out.num_rows + 1), 4096);
-	out.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * out.num_nonzeros, 4096);
-	out.values = (ValueT *)mkl_malloc(sizeof(ValueT) * out.num_nonzeros, 4096);
+	out.row_offsets = new OffsetT[out.num_rows + 1];
+	out.column_indices = new OffsetT[out.num_nonzeros];
+	out.values = new ValueT[out.num_nonzeros];
 
 	OffsetT *col_counts = new OffsetT[out.num_rows];
 	std::fill(col_counts, col_counts + out.num_rows, 0);
@@ -57,6 +57,7 @@ inline void TransposeCsr(
 
 	delete[] col_counts;
 }
+
 /**
  * Performs Incomplete Cholesky factorization (IC(0)) on a CSR matrix.
  * NOTE: This is a sequential implementation. The input matrix A must be symmetric.
@@ -164,27 +165,37 @@ inline void ForwardSolveMultiple(
 	int num_vectors)
 {
 	OffsetT n = l.num_rows;
-#pragma omp parallel for
-	for (int vec_idx = 0; vec_idx < num_vectors; ++vec_idx)
-	{
-		ValueT *x_col = x + (long long)vec_idx * n;
-		const ValueT *b_col = b + (long long)vec_idx * n;
 
-		for (OffsetT i = 0; i < n; ++i)
+	for (OffsetT i = 0; i < n; ++i)
+	{
+		ValueT sum[num_vectors];
+#pragma omp simd
+		for (int v = 0; v < num_vectors; ++v)
+			sum[v] = 0.0;
+
+		OffsetT diag_offset = 0;
+		for (OffsetT j_offset = l.row_offsets[i]; j_offset < l.row_offsets[i + 1]; ++j_offset)
 		{
-			ValueT sum = 0.0;
-			OffsetT diag_offset = 0;
-			for (OffsetT j_offset = l.row_offsets[i]; j_offset < l.row_offsets[i + 1]; ++j_offset)
+			OffsetT j = l.column_indices[j_offset];
+			ValueT val = l.values[j_offset];
+
+			if (i == j)
 			{
-				OffsetT j = l.column_indices[j_offset];
-				if (i == j)
-				{
-					diag_offset = j_offset;
-					continue;
-				}
-				sum += l.values[j_offset] * x_col[j];
+				diag_offset = j_offset;
+				continue;
 			}
-			x_col[i] = (b_col[i] - sum) / l.values[diag_offset];
+			OffsetT x_srx_idx = j * num_vectors;
+#pragma omp simd
+			for (int v = 0; v < num_vectors; ++v)
+				sum[v] += val * x[x_srx_idx + v];
+		}
+
+		ValueT diag_val = l.values[diag_offset];
+		OffsetT b_srx_idx = i * num_vectors;
+#pragma omp simd
+		for (int v = 0; v < num_vectors; ++v)
+		{
+			x[b_srx_idx + v] = (b[b_srx_idx + v] - sum[v]) / diag_val;
 		}
 	}
 }
@@ -201,39 +212,49 @@ inline void BackwardSolveMultiple(
 	int num_vectors)
 {
 	OffsetT n = l_t.num_rows;
-#pragma omp parallel for
-	for (int vec_idx = 0; vec_idx < num_vectors; ++vec_idx)
+
+	for (OffsetT i = n - 1; i >= 0; --i)
 	{
-		ValueT *x_col = x + (long long)vec_idx * n;
-		const ValueT *b_col = b + (long long)vec_idx * n;
+		ValueT sum[num_vectors];
+#pragma omp simd
+		for (int v = 0; v < num_vectors; ++v)
+			sum[v] = 0.0;
 
-		for (OffsetT i = n - 1; i >= 0; --i)
+		ValueT diag_val = 0.0;
+
+		for (OffsetT j_offset = l_t.row_offsets[i]; j_offset < l_t.row_offsets[i + 1]; ++j_offset)
 		{
-			ValueT sum = 0.0;
-			ValueT diag_val = 0.0;
+			OffsetT j = l_t.column_indices[j_offset];
+			ValueT val = l_t.values[j_offset];
 
-			for (OffsetT j_offset = l_t.row_offsets[i]; j_offset < l_t.row_offsets[i + 1]; ++j_offset)
+			if (i == j)
 			{
-				OffsetT j = l_t.column_indices[j_offset];
-				ValueT val = l_t.values[j_offset];
-
-				if (i == j)
-				{
-					diag_val = val; // L_T[i][i] (== L[i][i])
-				}
-				else
-				{
-					sum += val * x_col[j]; // L_T[i][j] * x[j]
-				}
+				diag_val = val;
+				continue;
 			}
+			OffsetT x_src_idx = j * num_vectors;
 
-			if (diag_val == 0.0)
+#pragma omp simd
+			for (int v = 0; v < num_vectors; ++v)
 			{
-				x_col[i] = 0.0;
+				sum[v] += val * x[x_src_idx + v];
 			}
-			else
+		}
+
+		OffsetT idx = i * num_vectors;
+
+		if (diag_val == 0.0)
+		{
+#pragma omp simd
+			for (int v = 0; v < num_vectors; ++v)
+				x[idx + v] = 0.0;
+		}
+		else
+		{
+#pragma omp simd
+			for (int v = 0; v < num_vectors; ++v)
 			{
-				x_col[i] = (b_col[i] - sum) / diag_val;
+				x[idx + v] = (b[idx + v] - sum[v]) / diag_val;
 			}
 		}
 	}

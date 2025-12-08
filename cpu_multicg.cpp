@@ -519,15 +519,14 @@ void RunCgTests(
 	}
 	fflush(stdout);
 
-	int timing_iterations = std::min(1000ull, std::max(10ull, ((16ull << 30) / (csr_matrix.num_nonzeros * num_vectors))));
-	timing_iterations = 32;
+	int timing_iterations = 32;
 
 	// Allocate vectors for multiple RHS
 	ValueT *b_vectors = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
 	ValueT *x_solutions = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
 
 	// Initialize RHS vectors with random values
-	srand(12345);
+	srand(time(NULL));
 	for (long long i = 0; i < (long long)csr_matrix.num_rows * num_vectors; ++i)
 		b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
 
@@ -608,11 +607,11 @@ void RunCgTests(
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// --- Teardown ---
+	csr_matrix.Clear();
 	L_matrix.Clear();
+	L_transpose.Clear();
 	mkl_free(b_vectors);
 	mkl_free(x_solutions);
-	csr_matrix.Clear();
-	L_transpose.Clear();
 }
 
 /**
@@ -626,7 +625,7 @@ int main(int argc, char **argv)
 	std::string mtx_filename;
 	int max_iters = 100000;
 	double tolerance = 1.0e-5;
-	int num_vectors = 32;
+	int num_vectors = 2048;
 
 	g_verbose = args.CheckCmdLineFlag("v");
 	g_verbose2 = args.CheckCmdLineFlag("v2");
@@ -653,8 +652,7 @@ int main(int argc, char **argv)
 	}
 
 	RunCgTests<double, int>(mtx_filename, max_iters, tolerance, num_vectors, args);
-
-	printf("\n");
+	printf("All tests completed.\n");
 
 	return 0;
 }
