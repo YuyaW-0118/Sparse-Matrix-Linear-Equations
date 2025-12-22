@@ -100,7 +100,8 @@ void RunCgTests(
 
 	int timing_iterations = std::clamp((16ull << 30) / (csr_matrix.num_nonzeros * num_vectors), 10ull, 1000ull);
 	timing_iterations = 10;
-	printf("Timing iterations: %d\n for %d non-zeros and %d vectors\n", timing_iterations, csr_matrix.num_nonzeros, num_vectors);
+	if (!g_quiet)
+		printf("Timing iterations: %d\n for %d non-zeros and %d vectors\n", timing_iterations, csr_matrix.num_nonzeros, num_vectors);
 
 	// Allocate vectors for multiple RHS
 	ValueT *b_vectors = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
@@ -119,77 +120,91 @@ void RunCgTests(
 	double flops_per_iter_multi = flops_per_iter_single * num_vectors;
 
 	// --- Test 1: Sequential Single-RHS CG --- This process takes too long compared to multi-RHS CG
+	// if (!g_quiet)
 	// printf("\n\n--- 1. CG (Sequential Single-RHS) ---\n");
 	// TestCGSingleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, avg_ms, average_iters);
 	// gflops = (flops_per_iter_single * average_iters) / (avg_ms / 1000.0) / 1e9;
 	// printf("Avg time: %8.3f ms, Avg iters: %6.1f, Overall GFLOPS: %6.2f\n",
 	// 	   avg_ms, average_iters, gflops);
 
-	// --- Test 2: Multiple-RHS CG with SpMM ---
-	// Simple SpMM
-	printf("\n--- 2. CG (Multiple-RHS w/ Simple SpMM) ---\n");
-	TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
-	gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
-	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	// // --- Test 2: Multiple-RHS CG with SpMM ---
+	// // Simple SpMM
+	// if (!g_quiet)
+	// 	printf("\n--- 2. CG (Multiple-RHS w/ Simple SpMM) ---\n");
+	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
+	// gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
+	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// Nonzero-splitting SpMM
-	printf("\n--- 2. CG (Multiple-RHS w/ Nonzero-split SpMM) ---\n");
+	if (!g_quiet)
+		printf("\n--- 2. CG (Multiple-RHS w/ Nonzero-split SpMM) ---\n");
 	TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms);
 	gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
-	// Merge-based SpMM
-	printf("\n--- 2. CG (Multiple-RHS w/ Merge-based SpMM) ---\n");
-	TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
-	gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
-	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	// // Merge-based SpMM
+	// if (!g_quiet)
+	// 	printf("\n--- 2. CG (Multiple-RHS w/ Merge-based SpMM) ---\n");
+	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
+	// gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
+	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
-	// // --- Setup for PCG ---
-	// printf("\n\n--- 3. Preconditioned CG (IC(0) + Multiple-RHS SpMM) ---\n");
-	// CsrMatrix<ValueT, OffsetT> L_matrix;
-	// printf("Performing Incomplete Cholesky factorization...\n");
-	// CpuTimer ic_timer;
-	// ic_timer.Start();
-	// bool ic_success = IncompleteCholesky(csr_matrix, L_matrix);
-	// ic_timer.Stop();
+	// --- Setup for PCG ---
+	if (!g_quiet)
+	{
+		printf("\n\n--- 3. Preconditioned CG (IC(0) + Multiple-RHS SpMM) ---\n");
+		printf("Performing Incomplete Cholesky factorization...\n");
+	}
+	CsrMatrix<ValueT, OffsetT> L_matrix;
+	CpuTimer ic_timer;
+	ic_timer.Start();
+	bool ic_success = IncompleteCholesky(csr_matrix, L_matrix);
+	ic_timer.Stop();
 
-	// if (!ic_success)
-	// {
-	// 	printf("IC factorization failed. Skipping PCG tests.\n");
-	// 	return;
-	// }
-	// printf("IC factorization setup time: %.3f ms\n", ic_timer.ElapsedMillis());
+	if (!ic_success)
+	{
+		printf("IC factorization failed. Skipping PCG tests.\n");
+		return;
+	}
+	if (!g_quiet)
+		printf("IC factorization setup time: %.3f ms\n", ic_timer.ElapsedMillis());
 
-	// CsrMatrix<ValueT, OffsetT> L_transpose;
-	// TransposeCsr(L_matrix, L_transpose);
+	CsrMatrix<ValueT, OffsetT> L_transpose;
+	TransposeCsr(L_matrix, L_transpose);
 
-	// // --- Test 3: Multiple-RHS PCG with SpMM ---
-	// // Note: GFLOPS for PCG is higher due to the preconditioner solve
-	// double nnz_l = L_matrix.num_nonzeros;
-	// double flops_per_iter_pcg = (2.0 * csr_matrix.num_nonzeros + 4.0 * nnz_l + 12.0 * csr_matrix.num_rows) * num_vectors;
+	// --- Test 3: Multiple-RHS PCG with SpMM ---
+	// Note: GFLOPS for PCG is higher due to the preconditioner solve
+	double nnz_l = L_matrix.num_nonzeros;
+	double flops_per_iter_pcg = (2.0 * csr_matrix.num_nonzeros + 4.0 * nnz_l + 12.0 * csr_matrix.num_rows) * num_vectors;
 
 	// // Simple SpMM
 	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
-	// printf("\nPCG with Simple SpMM:\n");
-	// printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	// if (!g_quiet)
+	// 	printf("\nPCG with Simple SpMM:\n");
+	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
-	// // Nonzero-splitting SpMM
-	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms);
-	// gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
-	// printf("\nPCG with Nonzero-split SpMM:\n");
-	// printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	// Nonzero-splitting SpMM
+	TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms);
+	gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
+	if (!g_quiet)
+		printf("\nPCG with Nonzero-split SpMM:\n");
+	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// // Merge-based SpMM
 	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
-	// printf("\nPCG with Merge-based SpMM:\n");
+	// if (!g_quiet)
+	// 	printf("\nPCG with Merge-based SpMM:\n");
 	// printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// --- Setup for SPAI ---
-	printf("\n\n--- 4. Sparse Approximate Inversion (SPAI) ---\n");
+	if (!g_quiet)
+	{
+		printf("\n\n--- 4. Sparse Approximate Inversion (SPAI) ---\n");
+		printf("Performing SPAI factorization...\n");
+	}
 	CsrMatrix<ValueT, OffsetT> spa_matrix;
-	printf("Performing SPAI factorization...\n");
 	CpuTimer spa_timer;
 	spa_timer.Start();
 	bool spa_success = SparseApproximateInversion(csr_matrix, spa_matrix);
@@ -204,7 +219,8 @@ void RunCgTests(
 	double flops_per_iter_spai = (4.0 * csr_matrix.num_nonzeros + 12.0 * csr_matrix.num_rows) * num_vectors;
 
 	// Simple SpMM
-	printf("\n--- 4. CG (Multiple-RHS w/ SPAI) ---\n");
+	if (!g_quiet)
+		printf("\n--- 4. CG (Multiple-RHS w/ SPAI) ---\n");
 	TestCGMultipleSPAI(csr_matrix, spa_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
 	gflops = (flops_per_iter_spai * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
@@ -212,8 +228,8 @@ void RunCgTests(
 	// --- Teardown ---
 	csr_matrix.Clear();
 	spa_matrix.Clear();
-	// L_matrix.Clear();
-	// L_transpose.Clear();
+	L_matrix.Clear();
+	L_transpose.Clear();
 	mkl_free(b_vectors);
 	mkl_free(x_solutions);
 }
@@ -240,7 +256,8 @@ int main(int argc, char **argv)
 	args.GetCmdLineArgument("max_iters", max_iters);
 	args.GetCmdLineArgument("tolerance", tolerance);
 
-	printf("Args parsed mtx_filename = [%s]\n", mtx_filename.c_str());
+	if (!g_quiet)
+		printf("Args parsed mtx_filename = [%s]\n", mtx_filename.c_str());
 
 	// Check if matrix is specified
 	if (mtx_filename.empty())
@@ -256,7 +273,8 @@ int main(int argc, char **argv)
 	}
 
 	RunCgTests<double, int>(mtx_filename, max_iters, tolerance, num_vectors, args);
-	printf("All tests completed.\n");
+	if (!g_quiet)
+		printf("All tests completed.\n");
 
 	return 0;
 }

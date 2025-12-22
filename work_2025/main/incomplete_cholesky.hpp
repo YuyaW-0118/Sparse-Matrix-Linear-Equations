@@ -205,7 +205,8 @@ void TestPCGMultipleRHS(
 	// --- Warmup run ---
 	for (int it = 0; it < timing_iterations; ++it)
 	{
-		printf("Warmup run %d/%d\n", it + 1, timing_iterations);
+		if (!g_quiet)
+			printf("Warmup run %d/%d\n", it + 1, timing_iterations);
 		fflush(stdout);
 		PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
 	}
@@ -215,8 +216,11 @@ void TestPCGMultipleRHS(
 	iters_of_min_ms = 0;
 	for (int it = 0; it < timing_iterations; ++it)
 	{
-		printf("Timed run %d/%d\n", it + 1, timing_iterations);
-		fflush(stdout);
+		if (!g_quiet)
+		{
+			printf("Timed run %d/%d\n", it + 1, timing_iterations);
+			fflush(stdout);
+		}
 		timer.Start();
 		int iter = PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
 		timer.Stop();

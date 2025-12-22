@@ -237,7 +237,8 @@ void TestCGMultipleSPAI(
 	// --- Warmup run ---
 	for (int it = 0; it < timing_iterations; ++it)
 	{
-		printf("Warmup iteration %d/%d\n", it + 1, timing_iterations);
+		if (!g_quiet)
+			printf("Warmup iteration %d/%d\n", it + 1, timing_iterations);
 		fflush(stdout);
 		// SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
 	}
@@ -248,13 +249,17 @@ void TestCGMultipleSPAI(
 	iters_of_min_ms = 0;
 	for (int it = 0; it < timing_iterations; ++it)
 	{
-		printf("Timed iteration %d/%d\n", it + 1, timing_iterations);
-		fflush(stdout);
+		if (!g_quiet)
+		{
+			printf("Timed iteration %d/%d\n", it + 1, timing_iterations);
+			fflush(stdout);
+		}
 		timer.Start();
 		int iters = SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
 		timer.Stop();
 		double elapsed_ms = timer.ElapsedMillis();
-		printf("\tTime: %.3f ms (%d iterations)\n", elapsed_ms, iters);
+		if (!g_quiet)
+			printf("\tTime: %.3f ms (%d iterations)\n", elapsed_ms, iters);
 		if (elapsed_ms < min_ms)
 		{
 			min_ms = elapsed_ms;
