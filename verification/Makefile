@@ -4,10 +4,16 @@ LDFLAGS = -lnuma -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthrea
 
 .PHONY: all clean
 
-all: matrix_stats
+all: matrix_stats parallel_efficiency preconditioner_benchmark
 
 matrix_stats: matrix_stats.cpp ../sparse_matrix.h
 	$(CXX) $(CXXFLAGS) -o _$@ $< $(LDFLAGS)
 
+parallel_efficiency: parallel_efficiency.cpp ../sparse_matrix.h
+	$(CXX) $(CXXFLAGS) -o _$@ $< $(LDFLAGS)
+
+preconditioner_benchmark: preconditioner_benchmark.cpp ../sparse_matrix.h
+	$(CXX) $(CXXFLAGS) -o _$@ $< $(LDFLAGS)
+
 clean:
-	rm -f matrix_stats
+	rm -f _matrix_stats _parallel_efficiency _preconditioner_benchmark
