@@ -983,3 +983,277 @@ struct CsrMatrix
         fflush(stdout);
     }
 };
+
+/**
+ * Blocked CSR (BCSR) sparse format matrix
+ */
+template <
+    typename ValueT,
+    typename OffsetT>
+struct BcsrMatrix
+{
+    int num_rows;  // 元の行列の行数
+    int num_cols;  // 元の行列の列数
+    int block_dim; // ブロックサイズ (例: 3)
+
+    OffsetT num_block_rows; // ブロック行数
+    OffsetT num_block_cols; // ブロック列数
+    OffsetT num_blocks;     // 非ゼロブロックの総数
+
+    ValueT *values;          // サイズ: num_blocks * block_dim * block_dim
+    OffsetT *column_indices; // サイズ: num_blocks
+    OffsetT *row_offsets;    // サイズ: num_block_rows + 1
+
+    // Whether to use NUMA malloc to always put storage on the same sockets
+    bool IsNumaMalloc()
+    {
+#ifdef CUB_MKL
+        return (numa_available() >= 0);
+#else
+        return false;
+#endif
+    }
+
+    /**
+     * Clear / Deallocate
+     */
+    void Clear()
+    {
+#ifdef CUB_MKL
+        if (IsNumaMalloc())
+        {
+            if (row_offsets)
+                numa_free(row_offsets, sizeof(OffsetT) * (num_block_rows + 1));
+            if (values)
+                numa_free(values, sizeof(ValueT) * num_blocks * block_dim * block_dim);
+            if (column_indices)
+                numa_free(column_indices, sizeof(OffsetT) * num_blocks);
+        }
+        else
+        {
+            if (row_offsets)
+                mkl_free(row_offsets);
+            if (column_indices)
+                mkl_free(column_indices);
+            if (values)
+                mkl_free(values);
+        }
+#else
+        if (row_offsets)
+            delete[] row_offsets;
+        if (column_indices)
+            delete[] column_indices;
+        if (values)
+            delete[] values;
+#endif
+
+        row_offsets = NULL;
+        column_indices = NULL;
+        values = NULL;
+        num_rows = 0;
+        num_cols = 0;
+        num_blocks = 0;
+    }
+
+    /**
+     * Default constructor
+     */
+    BcsrMatrix() : values(NULL), column_indices(NULL), row_offsets(NULL),
+                   num_rows(0), num_cols(0), block_dim(0),
+                   num_block_rows(0), num_block_cols(0), num_blocks(0) {}
+
+    /**
+     * Destructor
+     */
+    ~BcsrMatrix()
+    {
+        Clear();
+    }
+
+    /**
+     * Constructor from CsrMatrix
+     */
+    BcsrMatrix(
+        const CsrMatrix<ValueT, OffsetT> &csr_matrix,
+        int block_dim = 3,
+        bool verbose = false) : values(NULL), column_indices(NULL), row_offsets(NULL)
+    {
+        Init(csr_matrix, block_dim, verbose);
+    }
+
+    /**
+     * Initializer: Converts CSR to BCSR
+     */
+    void Init(
+        const CsrMatrix<ValueT, OffsetT> &csr,
+        int block_dim = 3,
+        bool verbose = false)
+    {
+        if (verbose)
+            printf("Converting CSR to BCSR (Block Dim: %d)...", block_dim);
+        fflush(stdout);
+
+        // 1. Basic properties and validation
+        if (csr.num_rows % block_dim != 0 || csr.num_cols % block_dim != 0)
+        {
+            fprintf(stderr, "Error: Matrix dimensions (%d x %d) must be divisible by block size (%d).\n",
+                    (int)csr.num_rows, (int)csr.num_cols, block_dim);
+            exit(1);
+        }
+
+        this->block_dim = block_dim;
+        this->num_rows = csr.num_rows;
+        this->num_cols = csr.num_cols;
+        this->num_block_rows = csr.num_rows / block_dim;
+        this->num_block_cols = csr.num_cols / block_dim;
+
+        // 2. Allocate row_offsets first to count blocks
+#ifdef CUB_MKL
+        if (IsNumaMalloc())
+        {
+            numa_set_strict(1);
+            row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (num_block_rows + 1), 0);
+        }
+        else
+        {
+            row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (num_block_rows + 1), 4096);
+        }
+#else
+        row_offsets = new OffsetT[num_block_rows + 1];
+#endif
+        row_offsets[0] = 0;
+
+        // 3. Counting Pass
+        // Use a temporary marker array to identify unique block columns in each block row
+        std::vector<OffsetT> marker(num_block_cols, -1);
+        OffsetT total_blocks = 0;
+
+        for (OffsetT br = 0; br < num_block_rows; ++br)
+        {
+            OffsetT blocks_in_this_row = 0;
+            // Iterate over the rows inside this block-row
+            for (int r = 0; r < block_dim; ++r)
+            {
+                OffsetT original_row = br * block_dim + r;
+                for (OffsetT i = csr.row_offsets[original_row]; i < csr.row_offsets[original_row + 1]; ++i)
+                {
+                    OffsetT block_col = csr.column_indices[i] / block_dim;
+                    if (marker[block_col] != br)
+                    {
+                        marker[block_col] = br;
+                        blocks_in_this_row++;
+                    }
+                }
+            }
+            total_blocks += blocks_in_this_row;
+            row_offsets[br + 1] = total_blocks;
+        }
+        this->num_blocks = total_blocks;
+
+        // 4. Allocate values and column_indices
+        long long value_size = (long long)num_blocks * block_dim * block_dim;
+
+#ifdef CUB_MKL
+        if (IsNumaMalloc())
+        {
+            column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * num_blocks, 0);
+            if (numa_num_task_nodes() > 1)
+                values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * value_size, 1);
+            else
+                values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * value_size, 0);
+        }
+        else
+        {
+            column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * num_blocks, 4096);
+            values = (ValueT *)mkl_malloc(sizeof(ValueT) * value_size, 4096);
+        }
+#else
+        column_indices = new OffsetT[num_blocks];
+        values = new ValueT[value_size];
+#endif
+
+        // Zero-fill values for padding
+        memset(values, 0, sizeof(ValueT) * value_size);
+
+        // Reset markers
+        std::fill(marker.begin(), marker.end(), -1);
+
+        // 5. Filling Pass
+        OffsetT current_block_idx = 0;
+
+        for (OffsetT br = 0; br < num_block_rows; ++br)
+        {
+            OffsetT row_start_idx = current_block_idx;
+
+            // 5a. Identify block columns again and fill column_indices
+            for (int r = 0; r < block_dim; ++r)
+            {
+                OffsetT original_row = br * block_dim + r;
+                for (OffsetT i = csr.row_offsets[original_row]; i < csr.row_offsets[original_row + 1]; ++i)
+                {
+                    OffsetT block_col = csr.column_indices[i] / block_dim;
+                    if (marker[block_col] != br)
+                    {
+                        marker[block_col] = br;
+                        column_indices[current_block_idx++] = block_col;
+                    }
+                }
+            }
+
+            // 5b. Sort column indices within the row to ensure CSR property
+            OffsetT row_end_idx = current_block_idx;
+            std::sort(column_indices + row_start_idx, column_indices + row_end_idx);
+
+            // 5c. Fill values
+
+            for (int r = 0; r < block_dim; ++r)
+            {
+                OffsetT original_row = br * block_dim + r;
+                for (OffsetT i = csr.row_offsets[original_row]; i < csr.row_offsets[original_row + 1]; ++i)
+                {
+                    OffsetT original_col = csr.column_indices[i];
+                    ValueT val = csr.values[i];
+
+                    OffsetT target_block_col = original_col / block_dim;
+                    int col_in_block = original_col % block_dim;
+
+                    // Find the block index
+                    OffsetT target_idx = -1;
+                    for (OffsetT k = row_start_idx; k < row_end_idx; ++k)
+                    {
+                        if (column_indices[k] == target_block_col)
+                        {
+                            target_idx = k;
+                            break;
+                        }
+                    }
+
+                    if (target_idx != -1)
+                    {
+                        // Calculate position in values array (Row-Major within block)
+                        long long block_base = (long long)target_idx * (block_dim * block_dim);
+                        values[block_base + r * block_dim + col_in_block] = val;
+                    }
+                }
+            }
+
+            // Reset markers for next row
+            std::fill(marker.begin(), marker.end(), -1);
+        }
+
+        if (verbose)
+            printf("done. (%d blocks)\n", (int)num_blocks);
+        fflush(stdout);
+    }
+
+    /**
+     * Display matrix info
+     */
+    void Display()
+    {
+        printf("BCSR Matrix (%d rows, %d cols, block_dim %d, %d blocks):\n",
+               (int)num_rows, (int)num_cols, block_dim, (int)num_blocks);
+        // Implement detailed display if needed
+        fflush(stdout);
+    }
+};
