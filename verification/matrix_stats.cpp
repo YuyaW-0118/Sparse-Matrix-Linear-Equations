@@ -15,17 +15,21 @@
 
 namespace fs = std::filesystem;
 
-int main(int argc, char** argv) {
-    std::string mtx_dir = "../download/final_mtx";
+int main(int argc, char **argv)
+{
+    std::string mtx_dir = "../download/final_mtx2";
 
-    if (argc > 1) {
+    if (argc > 1)
+    {
         mtx_dir = argv[1];
     }
 
     // Collect all .mtx files
     std::vector<std::string> mtx_files;
-    for (const auto& entry : fs::directory_iterator(mtx_dir)) {
-        if (entry.path().extension() == ".mtx") {
+    for (const auto &entry : fs::directory_iterator(mtx_dir))
+    {
+        if (entry.path().extension() == ".mtx")
+        {
             mtx_files.push_back(entry.path().string());
         }
     }
@@ -37,7 +41,8 @@ int main(int argc, char** argv) {
     std::cout << "filename,num_rows,num_cols,num_nonzeros,row_length_mean,row_length_std_dev" << std::endl;
 
     // Process each file
-    for (const auto& mtx_path : mtx_files) {
+    for (const auto &mtx_path : mtx_files)
+    {
         // Extract filename
         std::string filename = fs::path(mtx_path).filename().string();
 
