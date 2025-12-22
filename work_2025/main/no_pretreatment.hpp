@@ -15,15 +15,15 @@
 
 #include <mkl.h>
 
-#include "sparse_matrix.h"
-#include "utils.h"
-#include "work_2025/hyper_parameters.hpp"
-#include "work_2025/types.hpp"
-#include "work_2025/spmm/sample.hpp"
-#include "work_2025/spmm/row_splitting.hpp"
-#include "work_2025/spmm/merge_based.hpp"
-#include "work_2025/spmm/nonzero_splitting.hpp"
-#include "work_2025/cg/utils_multiple.hpp"
+#include "../../sparse_matrix.h"
+#include "../../utils.h"
+#include "../hyper_parameters.hpp"
+#include "../types.hpp"
+#include "../spmm/sample.hpp"
+#include "../spmm/row_splitting.hpp"
+#include "../spmm/merge_based.hpp"
+#include "../spmm/nonzero_splitting.hpp"
+#include "../cg/utils_multiple.hpp"
 
 //----------\-----------------------------------------------------------
 // Conjugate Gradient Solver (for multiple RHS using SpMM)
