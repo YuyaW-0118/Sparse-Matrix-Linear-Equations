@@ -269,8 +269,6 @@ BenchmarkResult RunSPAIPreconditioner(
 	result.iterations = best_iters;
 	result.gflops = (flops_per_iter * best_iters) / (min_ms / 1000.0) / 1e9;
 
-	spai_matrix.Clear();
-
 	return result;
 }
 
@@ -390,7 +388,6 @@ void ProcessMatrix(
 	SaveResultsToCSV(output_file, results);
 
 	// Cleanup
-	csr_matrix.Clear();
 	mkl_free(b_vectors);
 	mkl_free(x_solutions);
 }
