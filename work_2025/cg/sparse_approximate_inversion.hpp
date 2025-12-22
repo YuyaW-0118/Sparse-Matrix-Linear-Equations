@@ -49,9 +49,22 @@ inline bool SparseApproximateInversion(
 
 	// メモリ確保 (MKL/NUMA対応は省略し、標準newを使用。環境に合わせて変更可)
 #ifdef CUB_MKL
-	l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 64);
-	l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 64);
-	l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 64);
+	if (l.IsNumaMalloc())
+	{
+		numa_set_strict(1);
+		l.row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (l.num_rows + 1), 0);
+		l.column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * l.num_nonzeros, 0);
+		if (numa_num_task_nodes() > 1)
+			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 1);
+		else
+			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 0);
+	}
+	else
+	{
+		l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 4096);
+		l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 4096);
+		l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
+	}
 #else
 	l.row_offsets = new OffsetT[l.num_rows + 1];
 	l.column_indices = new OffsetT[l.num_nonzeros];

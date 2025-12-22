@@ -19,9 +19,22 @@ inline void TransposeCsr(
 	out.num_nonzeros = in.num_nonzeros;
 
 #ifdef CUB_MKL
-	out.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (out.num_rows + 1), 4096);
-	out.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * out.num_nonzeros, 4096);
-	out.values = (ValueT *)mkl_malloc(sizeof(ValueT) * out.num_nonzeros, 4096);
+	if (out.IsNumaMalloc())
+	{
+		numa_set_strict(1);
+		out.row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (out.num_rows + 1), 0);
+		out.column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * out.num_nonzeros, 0);
+		if (numa_num_task_nodes() > 1)
+			out.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * out.num_nonzeros, 1);
+		else
+			out.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * out.num_nonzeros, 0);
+	}
+	else
+	{
+		out.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (out.num_rows + 1), 4096);
+		out.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * out.num_nonzeros, 4096);
+		out.values = (ValueT *)mkl_malloc(sizeof(ValueT) * out.num_nonzeros, 4096);
+	}
 #else
 	out.row_offsets = new OffsetT[out.num_rows + 1];
 	out.column_indices = new OffsetT[out.num_nonzeros];
@@ -94,9 +107,22 @@ inline bool IncompleteCholesky(
 		l.num_nonzeros += row.size();
 
 #ifdef CUB_MKL
-	l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 4096);
-	l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 4096);
-	l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
+	if (l.IsNumaMalloc())
+	{
+		numa_set_strict(1);
+		l.row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (l.num_rows + 1), 0);
+		l.column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * l.num_nonzeros, 0);
+		if (numa_num_task_nodes() > 1)
+			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 1);
+		else
+			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 0);
+	}
+	else
+	{
+		l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 4096);
+		l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 4096);
+		l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
+	}
 #else
 	l.row_offsets = new OffsetT[l.num_rows + 1];
 	l.column_indices = new OffsetT[l.num_nonzeros];
