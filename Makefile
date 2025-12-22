@@ -187,3 +187,6 @@ merge_spmm : merge_spmm_test.cpp $(DEPS)
 
 cpu_multicg: cpu_multicg.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_multicg_driver cpu_multicg.cpp $(OMPCC_FLAGS_avx)
+
+cpu_multicg2: cpu_multicg2.cpp $(DEPS)
+	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_multicg2_driver cpu_multicg2.cpp $(OMPCC_FLAGS_avx)
