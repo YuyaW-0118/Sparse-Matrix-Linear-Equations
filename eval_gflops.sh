@@ -52,9 +52,6 @@ echo ""
 # Process each matrix file
 for mtx_file in ${MTX_FILES}; do
     mtx_name=$(basename "${mtx_file}" .mtx)
-    if [ "${mtx_name}" != "msc00726" ]; then
-        continue
-    fi
     output_csv="${OUTPUT_DIR}/${mtx_name}_gflops.csv"
 
     echo "Processing: ${mtx_name}"
