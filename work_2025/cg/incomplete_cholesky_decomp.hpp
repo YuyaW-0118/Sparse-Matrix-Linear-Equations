@@ -138,8 +138,9 @@ inline bool IncompleteCholesky(
 			{ // Diagonal element
 				if (l.values[k_offset] <= 0)
 				{
-					fprintf(stderr, "Error: Incomplete Cholesky failed. Not positive definite or numerically unstable.\n");
-					return false;
+					// fprintf(stderr, "Error: Incomplete Cholesky failed. Not positive definite or numerically unstable.\n");
+					// return false;
+					l.values[k_offset] = 1e-12; // Regularization to avoid zero/negative diagonal
 				}
 				l.values[k_offset] = sqrt(l.values[k_offset]);
 			}

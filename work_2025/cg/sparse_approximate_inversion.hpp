@@ -242,6 +242,68 @@ inline bool SparseApproximateInversion(
 		}
 	}
 
+	// =========================================================================
+	// [HPC Professional Fix]
+	// CG法には対称な前処理行列が必須ですが、SPAIの計算結果は一般に非対称です。
+	// ここで M = (M + M^T) / 2 を計算し、強制的に対称化します。
+	// Static Pattern (S_M = S_A) かつ Aが対称であることを前提としているため、
+	// Mのスパースパターンも対称であると仮定して、値を平均化します。
+	// =========================================================================
+	// 転置位置の値を検索するための補助構造を作成（ここでは簡易的にvector配列を使用）
+	// ※ 本来はよりメモリ効率の良い方法がありますが、セットアップフェーズなので可読性を優先します。
+	// 行ごとの列インデックスと、その値がvalues配列のどこにあるか(offset)を記録
+	std::vector<std::vector<std::pair<OffsetT, OffsetT>>> row_col_map(l.num_rows);
+
+#pragma omp parallel for
+	for (OffsetT r = 0; r < l.num_rows; ++r)
+	{
+		row_col_map[r].reserve(l.row_offsets[r + 1] - l.row_offsets[r]);
+		for (OffsetT i = l.row_offsets[r]; i < l.row_offsets[r + 1]; ++i)
+		{
+			row_col_map[r].push_back({l.column_indices[i], i});
+		}
+	}
+
+	// 対称化処理: M_ij = (M_ij + M_ji) / 2
+#pragma omp parallel for
+	for (OffsetT r = 0; r < l.num_rows; ++r)
+	{
+		for (OffsetT i = l.row_offsets[r]; i < l.row_offsets[r + 1]; ++i)
+		{
+			OffsetT c = l.column_indices[i];
+
+			// 上三角要素だけ処理し、対応する下三角要素と平均化する
+			if (c > r)
+			{
+				ValueT val_ij = l.values[i];
+
+				// 対称位置 (row=c, col=r) を探索
+				ValueT val_ji = 0.0;
+				OffsetT idx_ji = -1;
+
+				// 行 c の中から 列 r を探す (パターンが対称なら必ず見つかる)
+				bool found = false;
+				for (auto &entry : row_col_map[c])
+				{
+					if (entry.first == r)
+					{
+						idx_ji = entry.second;
+						val_ji = l.values[idx_ji];
+						found = true;
+						break;
+					}
+				}
+
+				if (found)
+				{
+					ValueT avg = (val_ij + val_ji) * 0.5;
+					l.values[i] = avg;		// M_ij
+					l.values[idx_ji] = avg; // M_ji
+				}
+			}
+		}
+	}
+
 	return true;
 }
 
