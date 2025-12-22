@@ -18,9 +18,15 @@ inline void TransposeCsr(
 	out.num_cols = in.num_rows;
 	out.num_nonzeros = in.num_nonzeros;
 
+#ifdef CUB_MKL
+	out.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (out.num_rows + 1), 4096);
+	out.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * out.num_nonzeros, 4096);
+	out.values = (ValueT *)mkl_malloc(sizeof(ValueT) * out.num_nonzeros, 4096);
+#else
 	out.row_offsets = new OffsetT[out.num_rows + 1];
 	out.column_indices = new OffsetT[out.num_nonzeros];
 	out.values = new ValueT[out.num_nonzeros];
+#endif
 
 	OffsetT *col_counts = new OffsetT[out.num_rows];
 	std::fill(col_counts, col_counts + out.num_rows, 0);
@@ -87,9 +93,15 @@ inline bool IncompleteCholesky(
 	for (const auto &row : l_temp)
 		l.num_nonzeros += row.size();
 
+#ifdef CUB_MKL
 	l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 4096);
 	l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 4096);
 	l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
+#else
+	l.row_offsets = new OffsetT[l.num_rows + 1];
+	l.column_indices = new OffsetT[l.num_nonzeros];
+	l.values = new ValueT[l.num_nonzeros];
+#endif
 
 	l.row_offsets[0] = 0;
 	OffsetT nz_count = 0;
@@ -140,7 +152,6 @@ inline bool IncompleteCholesky(
 				{
 					fprintf(stderr, "Error: Incomplete Cholesky failed. Not positive definite or numerically unstable.\n");
 					return false;
-					// l.values[k_offset] = 1e-12; // Regularization to avoid zero/negative diagonal
 				}
 				l.values[k_offset] = sqrt(l.values[k_offset]);
 			}
