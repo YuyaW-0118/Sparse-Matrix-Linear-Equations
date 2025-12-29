@@ -106,6 +106,8 @@ inline bool IncompleteCholesky(
 	for (const auto &row : l_temp)
 		l.num_nonzeros += row.size();
 
+	ValueT *vals_backup = nullptr;
+
 #ifdef CUB_MKL
 	if (l.IsNumaMalloc())
 	{
@@ -113,20 +115,28 @@ inline bool IncompleteCholesky(
 		l.row_offsets = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * (l.num_rows + 1), 0);
 		l.column_indices = (OffsetT *)numa_alloc_onnode(sizeof(OffsetT) * l.num_nonzeros, 0);
 		if (numa_num_task_nodes() > 1)
+		{
 			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 1);
+			vals_backup = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 1);
+		}
 		else
+		{
 			l.values = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 0);
+			vals_backup = (ValueT *)numa_alloc_onnode(sizeof(ValueT) * l.num_nonzeros, 0);
+		}
 	}
 	else
 	{
 		l.row_offsets = (OffsetT *)mkl_malloc(sizeof(OffsetT) * (l.num_rows + 1), 4096);
 		l.column_indices = (OffsetT *)mkl_malloc(sizeof(OffsetT) * l.num_nonzeros, 4096);
 		l.values = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
+		vals_backup = (ValueT *)mkl_malloc(sizeof(ValueT) * l.num_nonzeros, 4096);
 	}
 #else
 	l.row_offsets = new OffsetT[l.num_rows + 1];
 	l.column_indices = new OffsetT[l.num_nonzeros];
 	l.values = new ValueT[l.num_nonzeros];
+	vals_backup = new ValueT[l.num_nonzeros];
 #endif
 
 	l.row_offsets[0] = 0;
@@ -137,58 +147,95 @@ inline bool IncompleteCholesky(
 		{
 			l.column_indices[nz_count] = p.first;
 			l.values[nz_count] = p.second;
+			vals_backup[nz_count] = p.second;
 			nz_count++;
 		}
 		l.row_offsets[i + 1] = nz_count;
 	}
 
-	for (OffsetT i = 0; i < a.num_rows; ++i)
+	ValueT shift = 0.0;
+	const int max_attempts = 20;
+
+	for (int retry = 0; retry < max_attempts; ++retry)
 	{
-		for (OffsetT k_offset = l.row_offsets[i]; k_offset < l.row_offsets[i + 1]; ++k_offset)
+		bool failed = false;
+
+		if (retry > 0)
 		{
-			OffsetT k = l.column_indices[k_offset];
-
-			ValueT sum = 0.0;
-			OffsetT j_offset_l = l.row_offsets[i];
-			OffsetT j_offset_k = l.row_offsets[k];
-
-			while (j_offset_l < k_offset && j_offset_k < l.row_offsets[k + 1])
+			// Apply shift to diagonal elements
+#pragma omp parallel for
+			for (OffsetT idx = 0; idx < l.num_rows; ++idx)
 			{
-				if (l.column_indices[j_offset_l] == l.column_indices[j_offset_k])
+				for (OffsetT offset = l.row_offsets[idx]; offset < l.row_offsets[idx + 1]; ++offset)
 				{
-					sum += l.values[j_offset_l] * l.values[j_offset_k];
-					j_offset_l++;
-					j_offset_k++;
+					l.values[offset] = vals_backup[offset];
+					if (l.column_indices[offset] == idx)
+					{ // Diagonal
+						l.values[offset] += shift;
+					}
 				}
-				else if (l.column_indices[j_offset_l] < l.column_indices[j_offset_k])
-				{
-					j_offset_l++;
-				}
-				else
-				{
-					j_offset_k++;
-				}
-			}
-
-			l.values[k_offset] -= sum;
-
-			if (k == i)
-			{ // Diagonal element
-				if (l.values[k_offset] <= 0)
-				{
-					fprintf(stderr, "Error: Incomplete Cholesky failed. Not positive definite or numerically unstable.\n");
-					return false;
-				}
-				l.values[k_offset] = sqrt(l.values[k_offset]);
-			}
-			else
-			{													  // Off-diagonal element
-				OffsetT diag_k_offset = l.row_offsets[k + 1] - 1; // Assuming diagonal is last
-				l.values[k_offset] /= l.values[diag_k_offset];
 			}
 		}
+
+		for (OffsetT i = 0; i < a.num_rows; ++i)
+		{
+			for (OffsetT k_offset = l.row_offsets[i]; k_offset < l.row_offsets[i + 1]; ++k_offset)
+			{
+				OffsetT k = l.column_indices[k_offset];
+
+				ValueT sum = 0.0;
+				OffsetT j_offset_l = l.row_offsets[i];
+				OffsetT j_offset_k = l.row_offsets[k];
+
+				while (j_offset_l < k_offset && j_offset_k < l.row_offsets[k + 1])
+				{
+					if (l.column_indices[j_offset_l] == l.column_indices[j_offset_k])
+					{
+						sum += l.values[j_offset_l] * l.values[j_offset_k];
+						j_offset_l++;
+						j_offset_k++;
+					}
+					else if (l.column_indices[j_offset_l] < l.column_indices[j_offset_k])
+					{
+						j_offset_l++;
+					}
+					else
+					{
+						j_offset_k++;
+					}
+				}
+
+				l.values[k_offset] -= sum;
+
+				if (k == i)
+				{ // Diagonal element
+					if (l.values[k_offset] <= 0)
+					{
+						failed = true;
+						break;
+					}
+					l.values[k_offset] = sqrt(l.values[k_offset]);
+				}
+				else
+				{													  // Off-diagonal element
+					OffsetT diag_k_offset = l.row_offsets[k + 1] - 1; // Assuming diagonal is last
+					l.values[k_offset] /= l.values[diag_k_offset];
+				}
+			}
+			if (failed)
+				break;
+		}
+		if (!failed)
+		{
+			return true;
+		}
+		else
+		{
+			shift = (shift == 0.0) ? 1e-3 : shift * 10.0;
+		}
 	}
-	return true;
+	fprintf(stderr, "Incomplete Cholesky factorization failed after %d attempts.\n", max_attempts);
+	return false;
 }
 
 /**
