@@ -153,7 +153,6 @@ BenchmarkResult RunCGBenchmark(
 	result.gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 
 	// Cleanup
-	mkl_free(b_vectors);
 	mkl_free(x_solutions);
 
 	return result;
