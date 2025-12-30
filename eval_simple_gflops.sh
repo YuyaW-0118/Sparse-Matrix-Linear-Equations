@@ -12,7 +12,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MTX_DIR="${SCRIPT_DIR}/download/"
 OUTPUT_DIR="${SCRIPT_DIR}/data/simple_gflops"
-DRIVER="${SCRIPT_DIR}/cpu_singlecg"
+DRIVER="${SCRIPT_DIR}/_cpu_singlecg_driver"
 
 
 THREADS=${THREADS:-8}
@@ -36,7 +36,7 @@ fi
 # 3. Benchmark Loop
 # -----------------------------------------------------------------------------
 
-MTX_FILES =$(find "${MTX_DIR}" -name "*.mtx" -type f | sort)
+MTX_FILES=$(find "${MTX_DIR}" -name "*.mtx" -type f | sort)
 
 if [ -z "${MTX_FILES}" ]; then
 	echo "Error: No .mtx files found in ${MTX_DIR}"
