@@ -14,7 +14,7 @@ set -e
 
 # Directory settings
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MTX_DIR="${SCRIPT_DIR}/download/final_mtx"
+MTX_DIR="${SCRIPT_DIR}/download/final_mtx2"
 OUTPUT_DIR="${SCRIPT_DIR}/data/gflops"
 DRIVER="${SCRIPT_DIR}/_cpu_multicg2_driver"
 
