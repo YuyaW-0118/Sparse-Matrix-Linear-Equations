@@ -2,6 +2,8 @@ _cpu_spmv_driver
 _cpu_spmm_driver
 _gpu_spmv_driver
 _cpu_multicg_driver
+_cpu_multicg2_driver
+_cpu_singlecg_driver
 mtx*
 core
 download/

@@ -190,3 +190,6 @@ cpu_multicg: cpu_multicg.cpp $(DEPS)
 
 cpu_multicg2: cpu_multicg2.cpp $(DEPS)
 	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_multicg2_driver cpu_multicg2.cpp $(OMPCC_FLAGS_avx)
+
+cpu_singlecg: cpu_singlecg.cpp $(DEPS)
+	$(OMPCC) $(DEFINES) -DCUB_MKL -o _cpu_singlecg_driver cpu_singlecg.cpp $(OMPCC_FLAGS_avx)
