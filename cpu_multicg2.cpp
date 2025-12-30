@@ -214,7 +214,7 @@ void RunAllBenchmarks(
 			b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
 
 		ValueT threshold = calculate_threshold(b_vectors, csr_matrix.num_rows, tolerance);
-		fprintf(stderr, "  num_vectors=%d, threshold=%.6e\n", num_vectors, threshold);
+		fprintf(stderr, "  num_vectors=%d, threshold=%.6Le\n", num_vectors, threshold);
 
 		for (SpmmKernel kernel : kernels)
 		{
@@ -233,9 +233,7 @@ void RunAllBenchmarks(
 			printf("    %s, L=%d, kernel=%s: %.3f ms, %d iters, %.2f GFLOPS\n",
 				   matrix_name.c_str(), num_vectors, GetKernelName(kernel),
 				   result.min_ms, result.iterations, result.gflops);
-			break;
 		}
-		break;
 	}
 }
 
