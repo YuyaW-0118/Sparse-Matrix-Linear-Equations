@@ -45,6 +45,7 @@
 #include <limits>
 #include <iomanip>
 #include <immintrin.h>
+#include <cmath>
 
 #include <mkl.h>
 
@@ -54,6 +55,20 @@
 #include "work_2025/main/no_pretreatment.hpp"
 #include "work_2025/main/incomplete_cholesky.hpp"
 #include "work_2025/main/sparse_approximate_inverse.hpp"
+
+template <typename ValueT, typename OffsetT>
+ValueT calculate_threshold(const ValueT *b, OffsetT num_rows, ValueT tolerance)
+{
+	ValueT norm_sq = 0.0;
+
+#pragma omp parallel for reduction(+ : norm_sq)
+	for (OffsetT i = 0; i < num_rows; ++i)
+	{
+		norm_sq += b[i] * b[i];
+	}
+
+	return std::sqrt(norm_sq) * tolerance;
+}
 
 /**
  * Extract base name from matrix file path
@@ -112,6 +127,7 @@ BenchmarkResult RunCGBenchmark(
 	int max_iters,
 	ValueT tolerance,
 	int timing_iterations,
+	ValueT *b_vectors,
 	SpmmKernel kernel_type)
 {
 	BenchmarkResult result;
@@ -120,13 +136,7 @@ BenchmarkResult RunCGBenchmark(
 	result.num_vectors = num_vectors;
 
 	// Allocate vectors
-	ValueT *b_vectors = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
 	ValueT *x_solutions = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
-
-	// Initialize RHS vectors with random values
-	srand(42); // Fixed seed for reproducibility
-	for (long long i = 0; i < (long long)csr_matrix.num_rows * num_vectors; ++i)
-		b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
 
 	// Calculate FLOPS per iteration
 	double flops_per_iter_single = 2.0 * csr_matrix.num_nonzeros + 10.0 * csr_matrix.num_rows;
@@ -197,6 +207,15 @@ void RunAllBenchmarks(
 	// Run benchmarks
 	for (int num_vectors : num_vectors_list)
 	{
+		ValueT *b_vectors = (ValueT *)mkl_malloc(sizeof(ValueT) * csr_matrix.num_rows * num_vectors, 4096);
+		// Initialize RHS vectors with random values
+		srand(42); // Fixed seed for reproducibility
+		for (long long i = 0; i < (long long)csr_matrix.num_rows * num_vectors; ++i)
+			b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
+
+		ValueT threshold = calculate_threshold(b_vectors, csr_matrix.num_rows, tolerance);
+		fprintf(stderr, "  num_vectors=%d, threshold=%.6e\n", num_vectors, threshold);
+
 		for (SpmmKernel kernel : kernels)
 		{
 			if (!g_quiet)
@@ -206,18 +225,18 @@ void RunAllBenchmarks(
 			}
 
 			BenchmarkResult result = RunCGBenchmark(
-				csr_matrix, matrix_name, num_vectors, max_iters, tolerance,
-				timing_iterations, kernel);
+				csr_matrix, matrix_name, num_vectors, max_iters, threshold,
+				timing_iterations, b_vectors, kernel);
 
 			results.push_back(result);
 
 			printf("    %s, L=%d, kernel=%s: %.3f ms, %d iters, %.2f GFLOPS\n",
 				   matrix_name.c_str(), num_vectors, GetKernelName(kernel),
 				   result.min_ms, result.iterations, result.gflops);
+			break;
 		}
+		break;
 	}
-
-	csr_matrix.Clear();
 }
 
 /**
@@ -260,7 +279,7 @@ int main(int argc, char **argv)
 
 	std::string mtx_filename;
 	std::string output_csv;
-	int max_iters = 100000;
+	int max_iters = 10000;
 	double tolerance = 1.0e-5;
 	int timing_iterations = 3;
 
@@ -303,7 +322,7 @@ int main(int argc, char **argv)
 
 	// Run benchmarks
 	std::vector<BenchmarkResult> results;
-	RunAllBenchmarks<double, int>(mtx_filename, max_iters, tolerance, timing_iterations, results);
+	RunAllBenchmarks<long double, int>(mtx_filename, max_iters, tolerance, timing_iterations, results);
 
 	// Save results
 	SaveResultsToCSV(output_csv, results);
