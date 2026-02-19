@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <immintrin.h>
+#include <vector>
 
 #include <mkl.h>
 
@@ -35,7 +36,8 @@ int SPAISolveMultiple(
 	int num_vectors,
 	int max_iters,
 	ValueT tolerance,
-	SpmmKernel kernel_type)
+	SpmmKernel kernel_type,
+	std::vector<double> *max_errors = nullptr)
 {
 	OffsetT n = a.num_rows;
 	ValueT *R, *P, *AP, *Z;
@@ -97,6 +99,12 @@ int SPAISolveMultiple(
 	// rs_old = R * Z
 	dot_multiple(n, num_vectors, R, Z, rs_old);
 
+	// Clear max_errors if provided
+	if (max_errors != nullptr)
+	{
+		max_errors->clear();
+	}
+
 	int iter;
 	for (iter = 0; iter < max_iters; ++iter)
 	{
@@ -145,18 +153,25 @@ int SPAISolveMultiple(
 		dot_multiple(n, num_vectors, R, R, pAp);
 
 		int num_converged = 0;
-		double min_not_converged = std::numeric_limits<double>::max();
-#pragma omp parallel for reduction(+ : num_converged)
+		double max_relative_error = 0.0;
+#pragma omp parallel for reduction(+ : num_converged) reduction(max : max_relative_error)
 		for (int i = 0; i < num_vectors; ++i)
 		{
+			double rel_error = sqrt(pAp[i]) / b_norms[i];
+			max_relative_error = std::max(max_relative_error, rel_error);
 			if (!converged[i])
 			{
-				min_not_converged = std::min(min_not_converged, sqrt(pAp[i]) / b_norms[i]);
-				if (sqrt(pAp[i]) / b_norms[i] < tolerance)
+				if (rel_error < tolerance)
 					converged[i] = true;
 			}
 			if (converged[i])
 				num_converged++;
+		}
+
+		// Record max error for this iteration
+		if (max_errors != nullptr)
+		{
+			max_errors->push_back(max_relative_error);
 		}
 
 		if (num_converged == num_vectors)
@@ -227,8 +242,9 @@ void TestCGMultipleSPAI(
 	int num_vectors,
 	int timing_iterations,
 	SpmmKernel kernel_type,
-	double &min_ms,			// [out] Minimum time in milliseconds for one run
-	double &iters_of_min_ms // [out] Number of iterations for the minimum time run
+	double &min_ms,							  // [out] Minimum time in milliseconds for one run
+	double &iters_of_min_ms,				  // [out] Number of iterations for the minimum time run
+	std::vector<double> *max_errors = nullptr // [out] Max error per iteration (optional)
 )
 {
 	if (!g_quiet)
@@ -240,7 +256,7 @@ void TestCGMultipleSPAI(
 		if (!g_quiet)
 			printf("Warmup iteration %d/%d\n", it + 1, timing_iterations);
 		fflush(stdout);
-		// SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		// SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, nullptr);
 	}
 
 	// --- Timed runs ---
@@ -255,7 +271,9 @@ void TestCGMultipleSPAI(
 			fflush(stdout);
 		}
 		timer.Start();
-		int iters = SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		// Record errors only on the first timed run
+		std::vector<double> *errors_ptr = (it == 0) ? max_errors : nullptr;
+		int iters = SPAISolveMultiple(a, m, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, errors_ptr);
 		timer.Stop();
 		double elapsed_ms = timer.ElapsedMillis();
 		if (!g_quiet)

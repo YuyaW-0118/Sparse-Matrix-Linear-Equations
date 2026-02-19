@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <immintrin.h>
+#include <vector>
 
 #include <mkl.h>
 
@@ -38,7 +39,8 @@ int CGSolveMultiple(
 	int num_vectors,
 	int max_iters,
 	ValueT tolerance,
-	SpmmKernel kernel_type)
+	SpmmKernel kernel_type,
+	std::vector<double> *max_errors = nullptr)
 {
 	OffsetT n = a.num_rows;
 	ValueT *R, *P, *AP;
@@ -77,6 +79,12 @@ int CGSolveMultiple(
 	}
 
 	dot_multiple(n, num_vectors, R, R, rs_old);
+
+	// Clear max_errors if provided
+	if (max_errors != nullptr)
+	{
+		max_errors->clear();
+	}
 
 	int iter;
 	for (iter = 0; iter < max_iters; ++iter)
@@ -121,20 +129,29 @@ int CGSolveMultiple(
 
 		dot_multiple(n, num_vectors, R, R, rs_new);
 
-		// Convergence check
+		// Convergence check and max error recording
 		int num_converged = 0;
-#pragma omp parallel for reduction(+ : num_converged)
+		double max_relative_error = 0.0;
+#pragma omp parallel for reduction(+ : num_converged) reduction(max : max_relative_error)
 		for (int i = 0; i < num_vectors; ++i)
 		{
+			double rel_error = sqrt(rs_new[i]) / b_norms[i];
+			max_relative_error = std::max(max_relative_error, rel_error);
 			if (!converged[i])
 			{
-				if (sqrt(rs_new[i]) / b_norms[i] < tolerance)
+				if (rel_error < tolerance)
 				{
 					converged[i] = true;
 				}
 			}
 			if (converged[i])
 				num_converged++;
+		}
+
+		// Record max error for this iteration
+		if (max_errors != nullptr)
+		{
+			max_errors->push_back(max_relative_error);
 		}
 
 		if (num_converged == num_vectors)
@@ -194,8 +211,9 @@ void TestCGMultipleRHS(
 	int num_vectors,
 	int timing_iterations,
 	SpmmKernel kernel_type,
-	double &min_ms,			// [out] Minimum time in milliseconds for one run
-	double &iters_of_min_ms // [out] Number of iterations for the minimum time run
+	double &min_ms,							  // [out] Minimum time in milliseconds for one run
+	double &iters_of_min_ms,				  // [out] Number of iterations for the minimum time run
+	std::vector<double> *max_errors = nullptr // [out] Max error per iteration (optional)
 )
 {
 	if (!g_quiet)
@@ -207,7 +225,7 @@ void TestCGMultipleRHS(
 		if (!g_quiet)
 			printf("Warmup iteration %d/%d\n", it + 1, timing_iterations);
 		fflush(stdout);
-		CGSolveMultiple(a, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		CGSolveMultiple(a, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, nullptr);
 	}
 
 	// --- Timed runs ---
@@ -222,7 +240,9 @@ void TestCGMultipleRHS(
 			fflush(stdout);
 		}
 		timer.Start();
-		int iters = CGSolveMultiple(a, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		// Record errors only on the first timed run
+		std::vector<double> *errors_ptr = (it == 0) ? max_errors : nullptr;
+		int iters = CGSolveMultiple(a, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, errors_ptr);
 		timer.Stop();
 		double elapsed_ms = timer.ElapsedMillis();
 		if (!g_quiet)

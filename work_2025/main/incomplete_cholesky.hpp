@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <immintrin.h>
+#include <vector>
 
 #include <mkl.h>
 
@@ -41,7 +42,8 @@ int PCGSolveMultiple(
 	int num_vectors,
 	int max_iters,
 	ValueT tolerance,
-	SpmmKernel kernel_type)
+	SpmmKernel kernel_type,
+	std::vector<double> *max_errors = nullptr)
 {
 	OffsetT n = a.num_rows;
 	ValueT *R, *P, *AP, *Z;
@@ -89,6 +91,12 @@ int PCGSolveMultiple(
 
 	dot_multiple(n, num_vectors, R, Z, rho_old);
 
+	// Clear max_errors if provided
+	if (max_errors != nullptr)
+	{
+		max_errors->clear();
+	}
+
 	int iter;
 	for (iter = 0; iter < max_iters; ++iter)
 	{
@@ -128,10 +136,13 @@ int PCGSolveMultiple(
 		dot_multiple(n, num_vectors, R, R, R_norms);
 
 		num_converged = 0;
-#pragma omp parallel for reduction(+ : num_converged)
+		double max_relative_error = 0.0;
+#pragma omp parallel for reduction(+ : num_converged) reduction(max : max_relative_error)
 		for (int i = 0; i < num_vectors; ++i)
 		{
-			if (!converged[i] && (sqrt(R_norms[i]) / b_norms[i] < tolerance))
+			double rel_error = sqrt(R_norms[i]) / b_norms[i];
+			max_relative_error = std::max(max_relative_error, rel_error);
+			if (!converged[i] && (rel_error < tolerance))
 			{
 				converged[i] = true;
 			}
@@ -139,6 +150,12 @@ int PCGSolveMultiple(
 				num_converged++;
 		}
 		mkl_free(R_norms);
+
+		// Record max error for this iteration
+		if (max_errors != nullptr)
+		{
+			max_errors->push_back(max_relative_error);
+		}
 
 		if (num_converged == num_vectors)
 		{
@@ -198,8 +215,9 @@ void TestPCGMultipleRHS(
 	int num_vectors,
 	int timing_iterations,
 	SpmmKernel kernel_type,
-	double &min_ms,			// [out] Minimum time in milliseconds for one run
-	double &iters_of_min_ms // [out] Number of iterations for the minimum time run
+	double &min_ms,							  // [out] Minimum time in milliseconds for one run
+	double &iters_of_min_ms,				  // [out] Number of iterations for the minimum time run
+	std::vector<double> *max_errors = nullptr // [out] Max error per iteration (optional)
 )
 {
 	// --- Warmup run ---
@@ -208,7 +226,7 @@ void TestPCGMultipleRHS(
 		if (!g_quiet)
 			printf("Warmup run %d/%d\n", it + 1, timing_iterations);
 		fflush(stdout);
-		PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, nullptr);
 	}
 
 	CpuTimer timer;
@@ -222,7 +240,9 @@ void TestPCGMultipleRHS(
 			fflush(stdout);
 		}
 		timer.Start();
-		int iter = PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type);
+		// Record errors only on the first timed run
+		std::vector<double> *errors_ptr = (it == 0) ? max_errors : nullptr;
+		int iter = PCGSolveMultiple(a, l, l_transpose, b_vectors, x_solutions, num_vectors, max_iters, tolerance, kernel_type, errors_ptr);
 		timer.Stop();
 		double elapsed_ms = timer.ElapsedMillis();
 		if (elapsed_ms < min_ms)
