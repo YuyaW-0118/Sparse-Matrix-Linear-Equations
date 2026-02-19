@@ -130,7 +130,9 @@ def main():
 
     # Determine data directory (relative to script location or current directory)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(script_dir)
+    parent_dir = os.path.dirname(
+        os.path.dirname(script_dir)
+    )  # Go up two levels to project root
     data_dir = os.path.join(parent_dir, "data/error_data")
 
     if not os.path.exists(data_dir):
