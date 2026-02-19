@@ -7,3 +7,4 @@ _cpu_singlecg_driver
 mtx*
 core
 download/
+data/
