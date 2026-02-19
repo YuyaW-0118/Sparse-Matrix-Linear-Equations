@@ -36,6 +36,7 @@
 #include <iostream>
 #include <limits>
 #include <immintrin.h>
+#include <cmath>
 
 #include <mkl.h>
 
@@ -45,6 +46,59 @@
 #include "work_2025/main/no_pretreatment.hpp"
 #include "work_2025/main/incomplete_cholesky.hpp"
 #include "work_2025/main/sparse_approximate_inverse.hpp"
+
+template <typename ValueT, typename OffsetT>
+ValueT calculate_threshold(const ValueT *b, OffsetT num_rows, ValueT tolerance)
+{
+	ValueT norm_sq = 0.0;
+
+#pragma omp parallel for reduction(+ : norm_sq)
+	for (OffsetT i = 0; i < num_rows; ++i)
+	{
+		norm_sq += b[i] * b[i];
+	}
+
+	return std::sqrt(norm_sq) * tolerance;
+}
+
+/**
+ * Save error history to CSV file
+ */
+void SaveErrorsToCSV(
+	std::string filename,
+	const std::string &method_name,
+	const std::vector<double> &max_errors)
+{
+	filename = "data/error_data/" + filename;
+	std::ofstream ofs(filename);
+	if (!ofs.is_open())
+	{
+		fprintf(stderr, "Error: Cannot open file %s for writing\n", filename.c_str());
+		return;
+	}
+	ofs << "iteration,max_error" << std::endl;
+	for (size_t i = 0; i < max_errors.size(); ++i)
+	{
+		ofs << i << "," << std::scientific << max_errors[i] << std::endl;
+	}
+	ofs.close();
+	printf("Saved %s error history to %s (%zu iterations)\n", method_name.c_str(), filename.c_str(), max_errors.size());
+}
+
+/**
+ * Extract base name from matrix file path
+ */
+std::string GetMatrixBaseName(const std::string &mtx_filename)
+{
+	size_t last_slash = mtx_filename.find_last_of("/\\");
+	std::string basename = (last_slash == std::string::npos) ? mtx_filename : mtx_filename.substr(last_slash + 1);
+	size_t dot_pos = basename.find_last_of('.');
+	if (dot_pos != std::string::npos)
+	{
+		basename = basename.substr(0, dot_pos);
+	}
+	return basename;
+}
 
 /**
  * Run CG tests
@@ -98,8 +152,7 @@ void RunCgTests(
 	}
 	fflush(stdout);
 
-	int timing_iterations = std::clamp((16ull << 30) / (csr_matrix.num_nonzeros * num_vectors), 10ull, 1000ull);
-	timing_iterations = 10;
+	int timing_iterations = std::clamp((16ull << 30) / (csr_matrix.num_nonzeros * num_vectors), 3ull, 100ull);
 	if (!g_quiet)
 		printf("Timing iterations: %d\n for %d non-zeros and %d vectors\n", timing_iterations, csr_matrix.num_nonzeros, num_vectors);
 
@@ -112,6 +165,10 @@ void RunCgTests(
 	for (long long i = 0; i < (long long)csr_matrix.num_rows * num_vectors; ++i)
 		b_vectors[i] = static_cast<ValueT>(rand()) / static_cast<ValueT>(RAND_MAX);
 
+	double threshold = calculate_threshold(b_vectors, csr_matrix.num_rows, tolerance);
+	if (!g_quiet)
+		printf("Convergence threshold: %.6e\n", threshold);
+
 	// --- Test Execution & Display Performance ---
 	double min_ms;
 	double iters_of_min_ms;
@@ -119,10 +176,14 @@ void RunCgTests(
 	double flops_per_iter_single = 2.0 * csr_matrix.num_nonzeros + 10.0 * csr_matrix.num_rows;
 	double flops_per_iter_multi = flops_per_iter_single * num_vectors;
 
+	// Error history vectors for each method
+	std::vector<double> cg_errors, pcg_errors, spai_errors;
+	std::string matrix_basename = GetMatrixBaseName(mtx_filename);
+
 	// --- Test 1: Sequential Single-RHS CG --- This process takes too long compared to multi-RHS CG
 	// if (!g_quiet)
 	// printf("\n\n--- 1. CG (Sequential Single-RHS) ---\n");
-	// TestCGSingleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, avg_ms, average_iters);
+	// TestCGSingleRHS(csr_matrix, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, avg_ms, average_iters);
 	// gflops = (flops_per_iter_single * average_iters) / (avg_ms / 1000.0) / 1e9;
 	// printf("Avg time: %8.3f ms, Avg iters: %6.1f, Overall GFLOPS: %6.2f\n",
 	// 	   avg_ms, average_iters, gflops);
@@ -131,21 +192,22 @@ void RunCgTests(
 	// // Simple SpMM
 	// if (!g_quiet)
 	// 	printf("\n--- 2. CG (Multiple-RHS w/ Simple SpMM) ---\n");
-	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
+	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// Nonzero-splitting SpMM
 	if (!g_quiet)
 		printf("\n--- 2. CG (Multiple-RHS w/ Nonzero-split SpMM) ---\n");
-	TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms);
+	TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms, &cg_errors);
 	gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	SaveErrorsToCSV(matrix_basename + "_cg_errors.csv", "CG", cg_errors);
 
 	// // Merge-based SpMM
 	// if (!g_quiet)
 	// 	printf("\n--- 2. CG (Multiple-RHS w/ Merge-based SpMM) ---\n");
-	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
+	// TestCGMultipleRHS(csr_matrix, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_multi * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
@@ -178,21 +240,22 @@ void RunCgTests(
 	double flops_per_iter_pcg = (2.0 * csr_matrix.num_nonzeros + 4.0 * nnz_l + 12.0 * csr_matrix.num_rows) * num_vectors;
 
 	// // Simple SpMM
-	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
+	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	// if (!g_quiet)
 	// 	printf("\nPCG with Simple SpMM:\n");
 	// 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
 
 	// Nonzero-splitting SpMM
-	TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms);
+	TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::NONZERO_SPLIT, min_ms, iters_of_min_ms, &pcg_errors);
 	gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	if (!g_quiet)
 		printf("\nPCG with Nonzero-split SpMM:\n");
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
+	SaveErrorsToCSV(matrix_basename + "_pcg_ic_errors.csv", "PCG_IC", pcg_errors);
 
 	// // Merge-based SpMM
-	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
+	// TestPCGMultipleRHS(csr_matrix, L_matrix, L_transpose, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::MERGE, min_ms, iters_of_min_ms);
 	// gflops = (flops_per_iter_pcg * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	// if (!g_quiet)
 	// 	printf("\nPCG with Merge-based SpMM:\n");
@@ -221,31 +284,21 @@ void RunCgTests(
 	// Simple SpMM
 	if (!g_quiet)
 		printf("\n--- 4. CG (Multiple-RHS w/ SPAI) ---\n");
-	TestCGMultipleSPAI(csr_matrix, spa_matrix, b_vectors, x_solutions, max_iters, tolerance, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms);
+	TestCGMultipleSPAI(csr_matrix, spa_matrix, b_vectors, x_solutions, max_iters, threshold, num_vectors, timing_iterations, SpmmKernel::SIMPLE, min_ms, iters_of_min_ms, &spai_errors);
 	gflops = (flops_per_iter_spai * iters_of_min_ms) / (min_ms / 1000.0) / 1e9;
 	printf("Min time: %8.3f ms, Iters: %6.1f, Overall GFLOPS/s: %6.2f\n", min_ms, iters_of_min_ms, gflops);
-
-	// --- Teardown ---
-	csr_matrix.Clear();
-	spa_matrix.Clear();
-	L_matrix.Clear();
-	L_transpose.Clear();
-	mkl_free(b_vectors);
-	mkl_free(x_solutions);
+	SaveErrorsToCSV(matrix_basename + "_spai_errors.csv", "SPAI", spai_errors);
 }
 
-/**
- * Main
- */
 int main(int argc, char **argv)
 {
 	// Initialize command line
 	CommandLineArgs args(argc, argv);
 
 	std::string mtx_filename;
-	int max_iters = 100000;
+	int max_iters = 50000;
 	double tolerance = 1.0e-5;
-	int num_vectors = 32;
+	int num_vectors = 16;
 
 	g_verbose = args.CheckCmdLineFlag("v");
 	g_verbose2 = args.CheckCmdLineFlag("v2");
